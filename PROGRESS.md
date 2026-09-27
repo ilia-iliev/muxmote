@@ -89,12 +89,16 @@ The repo is in git (local only, branch `main`). Agents work in worktrees on thei
   - The error bar overlays instead of resizing.
   - "Unknown host" message.
 
-**In flight:**
-- First-sync cap raised to MAX_HISTORY, plus SSH compression.
-- Settings dialog: no dismiss on outside tap.
-- Hardware Enter sends.
-- Stale cache version.
-- An independent architecture/correctness review.
+**Also merged (94 tests):**
+- The first sync fetches up to MAX_HISTORY. With zlib compression that's about 100 KB, but Tailscale SSH has none.
+- A hardware Enter sends; Shift+Enter inserts a newline.
+- The settings dialog no longer dismisses on an outside tap.
+- The cache format is versioned.
+
+**In flight (review wave, three parallel agents):**
+- **History:** F2 (width change), F3 (clear), cheaper polls at the history limit, F11 (ANSI), F14 tests, and moving PaneState to `term`.
+- **Terminal control:** F1 (app-level session lock), F4 (ordered sends), F5 (`tmux -u`), F12 (`--`), F8 (no soft wrap, IME gate on rows), F10 (lifecycle).
+- **Network:** F6 (connect through the tailnet Network), F9 (timeouts), F13 (threading), F7 (no backup), F15 cleanup.
 
 **Next:** a final architecture and code review, then an update to the to-do list below.
 
