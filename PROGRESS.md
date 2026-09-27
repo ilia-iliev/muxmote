@@ -59,14 +59,22 @@ Spec: `APP.md`. This file is the handoff between sessions, so keep it current.
 
 ## Session 2026-09-27 (manager + parallel agents)
 
-The repo is now in git (a local repo, no remote). Agents work in worktrees on their own branches, and the manager merges them into `master`.
+The repo is in git (local only, branch `main`). Agents work in worktrees on their own branches, and the manager merges them.
 
-- Phase 1, in flight:
-  - (A) Settings screen, MainActivity, manifest, first compile.
-  - (B) Data layer testable on the JVM.
-  - (C) Docker SSH target ("none" auth) and real SshShell tests.
-  - (D) Headless emulator provisioning.
-- Phase 2, planned:
-  - Pull TerminalState/HomeState out into testable classes.
-  - Emulator end-to-end: the app on the emulator connects to the docker sshd+tmux via 10.0.2.2.
-  - A final review pass.
+**Merged into `main`** (74 tests pass, `assembleDebug` succeeds):
+- **Settings, navigation, manifest:** `ui/SettingsScreen.kt`, `MainActivity.kt` (screen switch plus BackHandler), and the manifest. `theme/` is trimmed to `MuxmoteTheme`.
+- **Data layer:** `Settings(Store)` with `PrefsStore`, and `PaneCache(dir)`. Cache saves are atomic (temp file plus move). `SettingsTest` and `PaneCacheTest` added.
+- **SSH:**
+  - `SshShell` runs commands cancellably, always disconnects the channel, and accepts `host:port`.
+  - `Tmux.sessions` uses `:` separators, because tmux shows tabs as `_` without a UTF-8 locale.
+  - A Docker SSH target, and `TmuxTest` parameterized [local]/[ssh].
+- **Screen logic:**
+  - `ui/TerminalModel.kt` and `ui/HomeModel.kt` are plain classes with JVM tests against real tmux.
+  - The poll loop applies the resize before each capture, and a lock serializes restore against the next resume.
+  - The latest refresh per host wins.
+
+**In flight:**
+- Emulator UI check of the settings, home, rotation and theme screens, on `emulator-5554`.
+- Terminal end-to-end on a second AVD, `muxmote2` (`emulator-5556`), against the docker sshd. Also: a clear error when a session is killed, and send errors staying visible.
+
+**Next:** a final architecture and code review, then an update to the to-do list below.
