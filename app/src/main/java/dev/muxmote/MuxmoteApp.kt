@@ -8,6 +8,7 @@ import dev.muxmote.data.Settings
 import dev.muxmote.net.Tailscale
 import dev.muxmote.remote.SshShell
 import dev.muxmote.remote.Tmux
+import dev.muxmote.ui.SessionLocks
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -20,6 +21,7 @@ class MuxmoteApp : Application() {
 
   /** Outlives screens, for cleanup that must finish after the user leaves (restoring window sizes). */
   val scope = CoroutineScope(SupervisorJob())
+  val sessionLocks = SessionLocks()
 
   private val connections = Connections({ SshShell(it.address, it.user) }, SshShell::close)
 

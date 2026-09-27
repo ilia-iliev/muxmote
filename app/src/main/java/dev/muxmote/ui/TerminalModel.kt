@@ -10,18 +10,30 @@ import dev.muxmote.remote.Tmux
 import dev.muxmote.term.Line
 import java.util.logging.Logger
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 const val POLL_MS = 1_000L
 const val AFTER_INPUT_MS = 150L
 
-private data class Grid(val cols: Int, val rows: Int)
+data class Grid(val cols: Int, val rows: Int)
+
+/** The window size after the layout changes to [cols]x[rows]. The keyboard keeps the rows it covers, so opening it doesn't reflow the agent. */
+fun Grid.resized(cols: Int, rows: Int, imeVisible: Boolean) = Grid(cols, if (imeVisible) this.rows else rows)
+
+/** One lock per host and session, shared by every [TerminalModel] of that session. */
+class SessionLocks {
+  private val locks = mutableMapOf<Pair<String, String>, Mutex>()
+
+  @Synchronized operator fun get(hostId: String, session: String) = locks.getOrPut(hostId to session) { Mutex() }
+}
 
 /** Index of the newest row with text. */
 val List<Line>.lastText
@@ -38,10 +50,20 @@ fun followTop(lines: List<Line>, screenRows: Int, rows: Int) =
  * One tmux session on the terminal screen: mirrors its pane, sizes its window to the phone and sends input.
  * [scope] outlives the screen, so input still gets sent and the window handed back after the user leaves.
  */
-class TerminalModel(private val tmux: Tmux, private val session: String, private val load: () -> PaneState, private val save: (PaneState) -> Unit, private val scope: CoroutineScope) {
+class TerminalModel(
+  private val tmux: Tmux,
+  private val session: String,
+  /**
+   * Held from a poll's start until its window is handed back. Shared with later models of the session, so their first
+   * resize can't land before the restore, nor their cache load before the save.
+   */
+  private val busy: Mutex,
+  private val load: () -> PaneState,
+  private val save: (PaneState) -> Unit,
+  private val scope: CoroutineScope,
+) {
   private val wake = Channel<Unit>(Channel.CONFLATED)
-  /** Held from a poll's start until its window is handed back, so a quick resume can't resize before the restore lands. */
-  private val busy = Mutex()
+  private val sends = Mutex()
   private var mirror: PaneMirror? = null
   private var size: Grid? = null
   private var applied: Grid? = null
@@ -76,8 +98,8 @@ class TerminalModel(private val tmux: Tmux, private val session: String, private
   }
 
   /** Sizes the window to [cols]x[rows] from the next poll on. */
-  fun resize(cols: Int, rows: Int) {
-    size = Grid(cols, rows)
+  fun resize(size: Grid) {
+    this.size = size
     wake.trySend(Unit)
   }
 
@@ -96,14 +118,16 @@ class TerminalModel(private val tmux: Tmux, private val session: String, private
     applied = size
   }
 
+  /** Saves first: the app may be killed during a slow restore. */
   private suspend fun handBack() {
-    remote { tmux.restoreSize(session) }?.let { Logger.getLogger("muxmote").warning("Restoring $session: $it") }
     mirror?.let { withContext(Dispatchers.IO) { save(it.state) } }
+    remote { tmux.restoreSize(session) }?.let { Logger.getLogger("muxmote").warning("Restoring $session: $it") }
   }
 
+  /** Starts right away and queues on [sends], so keys and submits reach tmux in the order they were pressed. */
   private fun send(block: suspend () -> Unit) =
-    scope.launch {
-      sendError = remote(block)
+    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+      sends.withLock { sendError = remote(block) }
       delay(AFTER_INPUT_MS)
       wake.trySend(Unit)
     }
