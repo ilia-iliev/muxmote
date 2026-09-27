@@ -5,7 +5,8 @@ import dev.muxmote.term.Line
 
 // Non-interactive shells often miss user-installed binaries.
 private const val PATH_PREFIX = "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:\$PATH\"\n"
-private const val SESSION_FORMAT = "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_activity}\t#{pane_current_command}"
+// Without a UTF-8 locale tmux prints tabs as "_"; session names can't contain ':', and the command goes last.
+private const val SESSION_FORMAT = "#{session_name}:#{session_windows}:#{session_attached}:#{session_activity}:#{pane_current_command}"
 private val SNAPSHOT_SCRIPT = Tmux::class.java.getResource("/snapshot.sh")!!.readText()
 
 data class TmuxSession(val name: String, val windows: Int, val attached: Boolean, val activity: Long, val command: String)
@@ -60,7 +61,7 @@ class Tmux(private val shell: Shell) {
   private fun target(session: String) = quote("=$session:")
 
   private fun parseSession(row: String): TmuxSession {
-    val f = row.split('\t')
+    val f = row.split(':', limit = 5)
     return TmuxSession(f[0], f[1].toInt(), f[2] != "0", f[3].toLong(), f.getOrElse(4) { "" })
   }
 

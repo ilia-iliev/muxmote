@@ -8,10 +8,22 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.ClassRule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.junit.runners.Parameterized
+import org.junit.runners.Parameterized.Parameters
 
-class TmuxTest {
-  private val shell = LocalShell()
+/** Runs every case against a local tmux and against tmux in the sshd container. */
+@RunWith(Parameterized::class)
+class TmuxTest(kind: String) {
+  companion object {
+    @JvmField @ClassRule val server = SshServer()
+
+    @JvmStatic @Parameters(name = "{0}") fun shells() = listOf("local", "ssh")
+  }
+
+  private val shell = if (kind == "ssh") server.shell() else LocalShell()
   private val tmux = Tmux(shell)
   private val session = "agent one"
 
@@ -31,6 +43,7 @@ class TmuxTest {
   @After
   fun tearDown() = runBlocking {
     runCatching { shell.run("tmux kill-server") }
+    (shell as? SshShell)?.close()
     Unit
   }
 
@@ -65,6 +78,24 @@ class TmuxTest {
     val screen = screenText().joinToString("\n")
     assertTrue("it's" in screen.replace("echo \"it's\"", ""))
     assertTrue("\ntwo\n" in screen)
+  }
+
+  @Test
+  fun snapshotCapsHistoryAt3000Rows() = runBlocking {
+    startSession(historyLimit = 10000)
+    type("seq 1 5000")
+    val snap = tmux.snapshot(session, 0, "")!!
+    assertEquals(3000, snap.history.size)
+    assertTrue(snap.truncated)
+    val numbers = (snap.history + snap.screen).texts().mapNotNull { it.toIntOrNull() }
+    assertEquals((numbers.first()..5000).toList(), numbers)
+  }
+
+  @Test
+  fun snapshotKeepsUnicode() = runBlocking {
+    startSession()
+    type("printf '\\342\\227\\217 caf\\303\\251\\n'")
+    assertTrue("● café" in screenText())
   }
 
   @Test
