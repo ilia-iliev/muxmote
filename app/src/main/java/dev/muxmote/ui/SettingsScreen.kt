@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -36,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import dev.muxmote.MuxmoteApp
 import dev.muxmote.data.DEFAULT_SHORTCUTS
@@ -75,7 +78,7 @@ private fun Setting<List<Host>>.hostFields(index: Int?) =
   }
 
 private fun Setting<List<Shortcut>>.shortcutFields(index: Int?) =
-  fields("shortcut", listOf("Label", "tmux keys, space-separated (e.g. C-c Escape)"), index, { listOf(it.label, it.keys) }) { _, (label, keys) -> Shortcut(label, keys) }
+  fields("shortcut", listOf("Label", "tmux keys, e.g. C-c Escape"), index, { listOf(it.label, it.keys) }) { _, (label, keys) -> Shortcut(label, keys) }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,13 +88,14 @@ fun SettingsScreen(app: MuxmoteApp, onBack: () -> Unit) {
   val shortcuts by settings.shortcuts.flow.collectAsState()
   val fontSize by settings.fontSize.flow.collectAsState()
   var dialog by remember { mutableStateOf<Fields?>(null) }
+  var confirmReset by remember { mutableStateOf(false) }
 
   Scaffold(
     topBar = {
       TopAppBar(title = { Text("Settings") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } })
     }
   ) { padding ->
-    LazyColumn(Modifier.padding(padding).fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
       item { Section("Machines") { dialog = settings.hosts.hostFields(null) } }
       itemsIndexed(hosts, key = { _, host -> host.id }) { i, host ->
         ListItem(
@@ -116,7 +120,9 @@ fun SettingsScreen(app: MuxmoteApp, onBack: () -> Unit) {
           modifier = Modifier.clickable { dialog = settings.shortcuts.shortcutFields(i) },
         )
       }
-      item { TextButton(onClick = { settings.shortcuts.value = DEFAULT_SHORTCUTS }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Reset to defaults") } }
+      item {
+        TextButton(onClick = { confirmReset = true }, enabled = shortcuts != DEFAULT_SHORTCUTS, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Reset to defaults") }
+      }
 
       item {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
@@ -128,6 +134,26 @@ fun SettingsScreen(app: MuxmoteApp, onBack: () -> Unit) {
   }
 
   dialog?.let { FieldsDialog(it) { dialog = null } }
+  if (confirmReset) ResetDialog(onReset = { settings.shortcuts.value = DEFAULT_SHORTCUTS }) { confirmReset = false }
+}
+
+@Composable
+private fun ResetDialog(onReset: () -> Unit, onClose: () -> Unit) {
+  AlertDialog(
+    onDismissRequest = onClose,
+    text = { Text("Replace your shortcuts with the defaults?") },
+    confirmButton = {
+      TextButton(
+        onClick = {
+          onReset()
+          onClose()
+        }
+      ) {
+        Text("Reset")
+      }
+    },
+    dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+  )
 }
 
 @Composable
@@ -154,14 +180,14 @@ private fun FieldsDialog(fields: Fields, onClose: () -> Unit) {
     onDismissRequest = onClose,
     title = { Text(fields.title) },
     text = {
-      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         fields.labels.forEachIndexed { i, label ->
           OutlinedTextField(
             value = values[i],
             onValueChange = { v -> values = values.toMutableList().also { it[i] = v } },
             label = { Text(label) },
             singleLine = true,
-            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = if (i < fields.labels.lastIndex) ImeAction.Next else ImeAction.Done),
           )
         }
       }
