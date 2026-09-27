@@ -1,0 +1,55 @@
+# Muxmote progress
+
+Spec: `APP.md`. This file is the handoff between sessions, so keep it current.
+
+## Decisions (made with the user)
+
+- **Hosts:** a manual list (name, MagicDNS/IP address, user). No Tailscale API.
+- **Auth:** Tailscale SSH. JSch tries the SSH "none" method, and Tailscale SSH accepts it. No keys, and host keys aren't pinned (WireGuard already authenticates peers). Every host needs `sudo tailscale set --ssh`.
+- **Width:** while you're viewing a session, the tmux window is resized to the phone (`resize-window -x -y`). On leave or pause the size goes back with `set-option -wu window-size`, which was verified to restore the attached client's size. Rows are computed with the keyboard hidden, so opening the keyboard doesn't reflow the agent.
+- **No streaming:** the app polls about once a second. A remote script (`app/src/main/resources/snapshot.sh`) hashes the capture and prints `=` when nothing changed, so an idle session costs almost nothing.
+- **Input:** a text field. Send uses `load-buffer` + `paste-buffer -p` (bracketed, so multi-line stays one message), then Enter. Sending an empty field sends Enter only. The shortcut bar sends tmux key names (`Escape`, `C-d`, `PPage`, …).
+- **Scrollback:** the phone keeps its own copy, up to 10k lines, in `filesDir/panes/<hostId>/<session>.json`. Each poll fetches only new history rows and splices them in by content alignment (`History.merge`). The remote copy wins for the rows it covers.
+- **Stack:** Kotlin, Compose/Material3, JSch (`com.github.mwiede:jsch`), kotlinx.serialization. There's no nav library: navigation is a state-based screen switch, and the activity handles config changes itself.
+
+## Environment
+
+- SDK: `~/Android/Sdk`, installed via cmdline-tools. Use the `android` CLI; `sdkmanager` is deprecated.
+- Build: `export JAVA_HOME=/opt/android-studio/jbr; ./gradlew :app:assembleDebug`
+- Tests: `./gradlew :app:testDebugUnitTest`. The tmux integration tests run the real local tmux on an isolated `TMUX_TMPDIR`.
+- SSH e2e test (opt-in): `MUXMOTE_SSH_HOST=100.106.4.86 ./gradlew :app:testDebugUnitTest --tests '*SshShellTest*'`. It currently fails with `Auth fail for methods 'publickey,password'` because this PC has `RunSSH: false`. The user has to run `sudo tailscale set --ssh`.
+- tmux on this PC is `~/.local/bin/tmux` 3.6b. The remote commands prepend `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin` to PATH and run under `sh -c`.
+
+## Done
+
+- Project scaffold (AGP 9, Kotlin 2.3, compileSdk 36, minSdk 29, package `dev.muxmote`). The bare build produced an APK.
+- `term/Line.kt`: styled line model, serializable.
+- `term/Ansi.kt`: SGR parser (16/256/truecolor, colon sub-params, OSC/CSI skipping). Lines are stored in canonical form, so equal rows compare equal whatever the escape context.
+- `term/History.kt`: alignment-based scrollback merge.
+- `remote/Shell.kt`, `remote/Tmux.kt` (sessions, resize, restoreSize, snapshot, submit, keys), `remote/PaneMirror.kt` (sync plus `PaneState`), `remote/SshShell.kt` (JSch, one session per host, one exec channel per command).
+- `data/Settings.kt` (hosts, shortcuts with defaults, font size; SharedPreferences + JSON), `data/PaneCache.kt`.
+- `net/Tailscale.kt`: detects a VPN network holding a 100.64/10 or fd7a:115c:a1e0::/48 address, and opens the Tailscale app.
+- `MuxmoteApp.kt`: app container and a per-host shell cache.
+- `ui/TermColors.kt`, `ui/Remote.kt` (turns errors into messages and adds the Tailscale SSH hint on auth failure), `ui/HomeScreen.kt`, `ui/TerminalScreen.kt`.
+- Tests: `AnsiTest`, `HistoryTest`, `TmuxTest` (24 passing, including the history-merge cases: growth, rotation at the history limit, clear, resume from cache), plus `TailscaleTest` (written, not run yet).
+
+## To do
+
+1. `ui/SettingsScreen.kt`: add/edit/delete hosts, add/edit/delete/reorder shortcuts plus a reset-to-defaults button, a font size slider (8–16), and a note about `tailscale set --ssh`. Share one fields dialog between hosts and shortcuts.
+2. `MainActivity.kt`: currently a placeholder. Needs `sealed Screen { Home, Settings, Terminal(host, session) }`, a `BackHandler`, `enableEdgeToEdge`, and `MuxmoteTheme`.
+3. `AndroidManifest.xml`: `android:name=".MuxmoteApp"`; INTERNET and ACCESS_NETWORK_STATE permissions; `<queries><package android:name="com.tailscale.ipn"/></queries>`; on the activity, move `windowSoftInputMode="adjustResize"` there and add `configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"`.
+4. Compile the UI code. It hasn't been compiled yet, so expect small errors. Then run all tests.
+5. Delete the unused `theme/Color.kt` and `Type.kt` bits if they're no longer referenced, and make sure `.gitignore` covers `local.properties` and `build/`.
+6. Once the user has enabled Tailscale SSH: run the SSH e2e test, then install the APK on the phone (moto-g86 is on the tailnet; use adb or share the APK).
+7. Verify on a device:
+   - Tailscale detection. If `getLinkProperties` on a foreign VPN comes back empty, fall back to checking for the VPN transport alone.
+   - JSch kex/hostkey negotiation against Tailscale SSH on Android.
+   - Auto-scroll/follow behaviour.
+   - Tap-to-focus alongside scrolling.
+8. Optional: confirm that Claude Code submits on the bracketed paste followed immediately by Enter. If it doesn't, add a short `sleep` before `send-keys Enter` in `Tmux.submit`.
+
+## Known limits
+
+- Only the session's current window and active pane are shown and resized.
+- If the phone disconnects while viewing, the PC window stays phone-sized until the next leave/pause succeeds, or until `tmux set -wu window-size` is run on the PC.
+- Lines tmux drops at `history-limit` between two polls can't be recovered (tmux lost them too).
