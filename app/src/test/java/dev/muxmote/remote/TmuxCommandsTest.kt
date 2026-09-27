@@ -29,10 +29,10 @@ class TmuxCommandsTest(kind: String) {
   /** Waits for the visible screen to satisfy [condition]. */
   private suspend fun awaitScreen(condition: (List<String>) -> Boolean) {
     repeat(100) {
-      if (condition(tmux.snapshot(session, 0, "")!!.screen.map { it.text })) return
+      if (condition(tmux.snapshot(session, 0, "", 30)!!.screen.map { it.text })) return
       delay(20)
     }
-    error("screen: " + tmux.snapshot(session, 0, "")!!.screen.map { it.text })
+    error("screen: " + tmux.snapshot(session, 0, "", 30)!!.screen.map { it.text })
   }
 
   @After
