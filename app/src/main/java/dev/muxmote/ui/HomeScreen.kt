@@ -30,7 +30,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -43,34 +42,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.muxmote.MuxmoteApp
 import dev.muxmote.data.Host
 import dev.muxmote.remote.TmuxSession
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-
-private sealed interface HostState {
-  data object Loading : HostState
-
-  data class Loaded(val sessions: List<TmuxSession>) : HostState
-
-  data class Failed(val message: String) : HostState
-}
-
-private class HomeState(private val app: MuxmoteApp, private val scope: CoroutineScope) {
-  val hosts = mutableStateMapOf<String, HostState>()
-
-  val refreshing
-    get() = hosts.values.any { it == HostState.Loading }
-
-  fun refresh(list: List<Host>) {
-    list.forEach { host ->
-      hosts[host.id] = HostState.Loading
-      scope.launch {
-        var sessions = emptyList<TmuxSession>()
-        val error = remote { sessions = app.tmux(host).sessions() }
-        hosts[host.id] = error?.let { HostState.Failed(it) } ?: HostState.Loaded(sessions)
-      }
-    }
-  }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,14 +49,14 @@ fun HomeScreen(app: MuxmoteApp, onOpen: (Host, String) -> Unit, onSettings: () -
   val hosts by app.settings.hosts.flow.collectAsState()
   val tailscaleUp by app.tailscale.connected.collectAsState()
   val scope = rememberCoroutineScope()
-  val state = remember { HomeState(app, scope) }
+  val model = remember { HomeModel(app::tmux, scope) }
   val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
   val resumed = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
 
   LaunchedEffect(resumed, hosts, tailscaleUp) {
     if (!resumed) return@LaunchedEffect
     app.tailscale.refresh()
-    state.refresh(hosts)
+    model.refresh(hosts)
   }
 
   Scaffold(
@@ -93,19 +64,19 @@ fun HomeScreen(app: MuxmoteApp, onOpen: (Host, String) -> Unit, onSettings: () -
       TopAppBar(
         title = { Text("Muxmote") },
         actions = {
-          IconButton(onClick = { state.refresh(hosts) }) { Icon(Icons.Filled.Refresh, "Refresh") }
+          IconButton(onClick = { model.refresh(hosts) }) { Icon(Icons.Filled.Refresh, "Refresh") }
           IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Settings") }
         },
       )
     }
   ) { padding ->
-    PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = { state.refresh(hosts) }, modifier = Modifier.padding(padding).fillMaxSize()) {
+    PullToRefreshBox(isRefreshing = model.refreshing, onRefresh = { model.refresh(hosts) }, modifier = Modifier.padding(padding).fillMaxSize()) {
       LazyColumn(Modifier.fillMaxSize()) {
         if (!tailscaleUp) item { TailscaleOff(onOpen = app.tailscale::openApp) }
         if (hosts.isEmpty()) item { NoHosts(onSettings) }
         hosts.forEach { host ->
-          item(key = host.id) { HostHeader(host, state.hosts[host.id]) }
-          val hostState = state.hosts[host.id]
+          item(key = host.id) { HostHeader(host, model.hosts[host.id]) }
+          val hostState = model.hosts[host.id]
           if (hostState is HostState.Loaded) {
             items(hostState.sessions, key = { host.id + "/" + it.name }) { session -> SessionRow(session) { onOpen(host, session.name) } }
           }

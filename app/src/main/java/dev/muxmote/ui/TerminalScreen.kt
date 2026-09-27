@@ -1,6 +1,5 @@
 package dev.muxmote.ui
 
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -56,7 +55,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -65,80 +63,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.muxmote.MuxmoteApp
 import dev.muxmote.data.Host
 import dev.muxmote.data.Shortcut
-import dev.muxmote.remote.PaneMirror
 import dev.muxmote.term.Line
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-
-private const val POLL_MS = 1_000L
-private const val AFTER_INPUT_MS = 150L
-
-private class TerminalState(private val app: MuxmoteApp, private val host: Host, private val session: String, private val scope: CoroutineScope) {
-  private val tmux = app.tmux(host)
-  private val wake = Channel<Unit>(Channel.CONFLATED)
-  private var mirror: PaneMirror? = null
-  var lines by mutableStateOf(emptyList<Line>())
-  var error by mutableStateOf<String?>(null)
-
-  /** Mirrors the pane until cancelled, then hands the window back to the PC and stores the scrollback. */
-  suspend fun poll() {
-    val mirror = mirror ?: load()
-    try {
-      while (true) {
-        error = remote { if (mirror.sync()) lines = mirror.state.lines }
-        withTimeoutOrNull(POLL_MS) { wake.receive() }
-      }
-    } finally {
-      app.scope.launch {
-        remote { tmux.restoreSize(session) }?.let { Log.w("muxmote", "Restoring $session: $it") }
-        app.paneCache.save(host, session, mirror.state)
-      }
-    }
-  }
-
-  suspend fun resize(size: IntSize) {
-    error = remote { tmux.resize(session, size.width, size.height) }
-    wake.trySend(Unit)
-  }
-
-  fun submit(text: String) = send { tmux.submit(session, text) }
-
-  fun keys(shortcut: Shortcut) = send { tmux.keys(session, shortcut.keys.split(' ').filter { it.isNotBlank() }) }
-
-  private fun send(block: suspend () -> Unit) =
-    scope.launch {
-      error = remote(block)
-      delay(AFTER_INPUT_MS)
-      wake.trySend(Unit)
-    }
-
-  private suspend fun load(): PaneMirror {
-    val cached = withContext(Dispatchers.IO) { app.paneCache.load(host, session) }
-    lines = cached.lines
-    return PaneMirror(tmux, session, cached).also { mirror = it }
-  }
-}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> Unit) {
-  val scope = rememberCoroutineScope()
-  val state = remember { TerminalState(app, host, session, scope) }
+  val model = remember { TerminalModel(app.tmux(host), session, { app.paneCache.load(host, session) }, { app.paneCache.save(host, session, it) }, app.scope) }
   val shortcuts by app.settings.shortcuts.flow.collectAsState()
   val fontSize by app.settings.fontSize.flow.collectAsState()
   val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
   val resumed = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
   val input = remember { FocusRequester() }
   val keyboard = LocalSoftwareKeyboardController.current
-  var size by remember { mutableStateOf<IntSize?>(null) }
 
-  LaunchedEffect(resumed) { if (resumed) state.poll() }
-  LaunchedEffect(resumed, size) { if (resumed) size?.let { state.resize(it) } }
+  LaunchedEffect(resumed) { if (resumed) model.poll() }
 
   Scaffold(
     topBar = {
@@ -154,17 +93,18 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
     }
   ) { padding ->
     Column(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
-      state.error?.let { ErrorBar(it) }
+      model.error?.let { ErrorBar(it) }
       val textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = fontSize.sp, lineHeight = (fontSize * 1.2f).sp, color = TermForeground)
       val measurer = rememberTextMeasurer()
       val cell = remember(textStyle) { measurer.measure("0".repeat(100), textStyle, softWrap = false).size.let { it.width / 100f to it.height.toFloat() } }
       BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().background(TermBackground)) {
         // Size the tmux window to the screen without the keyboard, so opening it doesn't reflow the agent.
-        val grid = IntSize((constraints.maxWidth / cell.first).toInt(), (constraints.maxHeight / cell.second).toInt())
+        val cols = (constraints.maxWidth / cell.first).toInt()
+        val rows = (constraints.maxHeight / cell.second).toInt()
         val imeVisible = WindowInsets.isImeVisible
-        LaunchedEffect(grid, imeVisible) { if (!imeVisible) size = grid }
+        LaunchedEffect(cols, rows, imeVisible) { if (!imeVisible) model.resize(cols, rows) }
         TerminalLines(
-          state.lines,
+          model.lines,
           textStyle,
           onTap = {
             input.requestFocus()
@@ -172,8 +112,8 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
           },
         )
       }
-      ShortcutBar(shortcuts, state::keys)
-      InputBar(input, state::submit)
+      ShortcutBar(shortcuts, model::keys)
+      InputBar(input, model::submit)
     }
   }
 }
