@@ -49,12 +49,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -178,18 +187,28 @@ private fun ShortcutBar(shortcuts: List<Shortcut>, onKey: (Shortcut) -> Unit) {
   }
 }
 
+/** Replaces the selection with [s] and puts the cursor after it. */
+internal fun TextFieldValue.insert(s: String) = TextFieldValue(text.replaceRange(selection.min, selection.max, s), TextRange(selection.min + s.length))
+
+/** A hardware Enter sends, like the IME's send key; Shift+Enter inserts a newline. */
+private fun KeyEvent.onEnter(submit: () -> Unit, newline: () -> Unit): Boolean {
+  if (key != Key.Enter && key != Key.NumPadEnter) return false
+  if (type == KeyEventType.KeyDown) if (isShiftPressed) newline() else submit()
+  return true
+}
+
 @Composable
 private fun InputBar(focus: FocusRequester, onSubmit: (String) -> Unit) {
-  var text by remember { mutableStateOf("") }
+  var text by remember { mutableStateOf(TextFieldValue()) }
   val submit = {
-    onSubmit(text)
-    text = ""
+    onSubmit(text.text)
+    text = TextFieldValue()
   }
   Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
     TextField(
       value = text,
       onValueChange = { text = it },
-      modifier = Modifier.weight(1f).focusRequester(focus),
+      modifier = Modifier.weight(1f).focusRequester(focus).onPreviewKeyEvent { it.onEnter(submit) { text = text.insert("\n") } },
       placeholder = { Text("Type, then send (empty sends Enter)") },
       maxLines = 5,
       keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),

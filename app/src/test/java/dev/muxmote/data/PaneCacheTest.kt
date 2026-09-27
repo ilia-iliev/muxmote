@@ -9,6 +9,7 @@ import dev.muxmote.term.rgb
 import java.io.File
 import java.nio.file.Files
 import kotlin.concurrent.thread
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -21,6 +22,14 @@ class PaneCacheTest {
 
   @Test
   fun missingFileIsEmpty() {
+    assertEquals(PaneState(), cache.load(host, "main"))
+  }
+
+  @Test
+  fun dropsACacheFromAnOlderFormat() {
+    val file = File(dir, "${host.id}/main.json")
+    file.parentFile!!.mkdirs()
+    file.writeText(Json.encodeToString(PaneState.serializer(), state("old")))
     assertEquals(PaneState(), cache.load(host, "main"))
   }
 

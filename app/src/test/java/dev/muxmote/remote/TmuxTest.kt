@@ -1,6 +1,7 @@
 package dev.muxmote.remote
 
 import dev.muxmote.term.Line
+import dev.muxmote.term.MAX_HISTORY
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -90,24 +91,24 @@ class TmuxTest(kind: String) {
   }
 
   @Test
-  fun snapshotCapsHistoryAt3000Rows() = runBlocking {
-    startSession(historyLimit = 10000)
-    type("seq 1 5000")
+  fun snapshotCapsHistoryAtMaxHistory() = runBlocking {
+    startSession(historyLimit = 2 * MAX_HISTORY)
+    type("seq 1 ${MAX_HISTORY + 2000}")
     val snap = tmux.snapshot(session, 0, "")!!
-    assertEquals(3000, snap.history.size)
+    assertEquals(MAX_HISTORY, snap.history.size)
     assertTrue(snap.truncated)
     val numbers = (snap.history + snap.screen).texts().mapNotNull { it.toIntOrNull() }
-    assertEquals((numbers.first()..5000).toList(), numbers)
+    assertEquals((numbers.first()..MAX_HISTORY + 2000).toList(), numbers)
   }
 
   @Test
   fun firstSnapshotOfAFullScrollbackFetchesAllOfIt() = runBlocking {
-    startSession(historyLimit = 1000)
-    type("seq 1 900 | sed 's/$/ ${"x".repeat(40)}/'")
-    // Rewrapping to the phone width pushes the scrollback past its limit, as on a real first open.
+    startSession()
+    type("seq 1 1900 | sed 's/$/ ${"x".repeat(40)}/'")
+    // Rewrapping to the phone width doubles the rows and pushes the scrollback past its limit, as on a real first open.
     tmux.resize(session, 30, 20)
     val snap = tmux.snapshot(session, 0, "")!!
-    assertTrue(snap.historySize > 1000)
+    assertTrue(snap.historySize > 3500)
     assertFalse(snap.truncated)
   }
 
