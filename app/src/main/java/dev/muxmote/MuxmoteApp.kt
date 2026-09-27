@@ -21,14 +21,19 @@ class MuxmoteApp : Application() {
   /** Outlives screens, for cleanup that must finish after the user leaves (restoring window sizes). */
   val scope = CoroutineScope(SupervisorJob())
 
-  private val connections = Connections({ SshShell(it.address, it.user) }, SshShell::close)
+  private val connections = Connections({ SshShell(it.address, it.user) { tailscale.network } }, { scope.launch { it.close() } })
 
   override fun onCreate() {
     super.onCreate()
     settings = Settings(PrefsStore(this))
     paneCache = PaneCache(File(filesDir, "panes"))
     tailscale = Tailscale(this)
-    scope.launch { settings.hosts.flow.collect(connections::retain) }
+    scope.launch {
+      settings.hosts.flow.collect {
+        connections.retain(it)
+        paneCache.retain(it)
+      }
+    }
   }
 
   fun tmux(host: Host) = Tmux(connections[host])

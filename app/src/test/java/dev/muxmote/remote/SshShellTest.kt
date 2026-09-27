@@ -26,7 +26,25 @@ class SshShellTest {
   private val shell = server.shell()
   private val numbers = (1..200_000).joinToString("") { "$it\n" }
 
-  @After fun tearDown() = shell.close()
+  @After fun tearDown() = runBlocking { shell.close() }
+
+  private fun sshSessions() = server.exec("ps", "-o", "args").lines().count { it.startsWith("sshd-session") }
+
+  private fun paused(block: () -> Unit) {
+    server.pause()
+    try {
+      block()
+    } finally {
+      server.unpause()
+    }
+  }
+
+  private fun assertLost(message: String, block: suspend () -> Unit) {
+    val start = System.nanoTime()
+    val e = assertThrows(ConnectionLost::class.java) { runBlocking { block() } }
+    assertEquals(message, e.message)
+    assertTrue("took ${(System.nanoTime() - start) / 1_000_000} ms", System.nanoTime() - start < 12_000_000_000)
+  }
 
   @Test
   fun stdinRoundTrip() = runBlocking {
@@ -86,6 +104,66 @@ class SshShellTest {
     assertThrows(JSchException::class.java) { runBlocking { shell.run("true") } }
     server.start()
     assertEquals("ok\n", shell.run("echo ok"))
+  }
+
+  @Test
+  fun hungConnectionTimesOutAndReconnects() = runBlocking {
+    shell.run("true")
+    val running = async(Dispatchers.Default) { runCatching { shell.run("sleep 1; echo late") } }
+    delay(300)
+    paused { assertLost("No response in 10 s") { running.await().getOrThrow() } }
+    assertEquals("ok\n", shell.run("echo ok"))
+  }
+
+  @Test
+  fun unresponsiveServerFailsAndReconnects() = runBlocking {
+    shell.run("true")
+    paused { assertLost("No response in 10 s") { shell.run("true") } }
+    assertEquals("ok\n", shell.run("echo ok"))
+  }
+
+  @Test
+  fun droppedConnectionMidCommandIsLost() = runBlocking {
+    shell.run("true")
+    val running = async(Dispatchers.Default) { runCatching { shell.run("sleep 2") } }
+    delay(300)
+    server.dropConnections()
+    assertLost("Connection lost") { running.await().getOrThrow() }
+  }
+
+  @Test
+  fun closedShellFails() = runBlocking {
+    shell.run("true")
+    shell.close()
+    assertThrows(IllegalStateException::class.java) { runBlocking { shell.run("true") } }
+    Unit
+  }
+
+  @Test
+  fun closeDuringConnectLeavesNoSession() = runBlocking {
+    repeat(10) { i ->
+      val shell = server.shell()
+      val running = launch(Dispatchers.Default) { runCatching { shell.run("true") } }
+      delay(i * 30L)
+      shell.close()
+      running.join()
+    }
+    delay(500)
+    assertEquals(0, sshSessions())
+  }
+
+  @Test
+  fun authFailureIsTyped() {
+    val shell = server.shell("nobody")
+    assertThrows(AuthFailed::class.java) { runBlocking { shell.run("true") } }
+  }
+
+  @Test
+  fun tailnetHostsFailFastWithoutTailscale() {
+    for (address in listOf("100.64.0.1", "pc", "pc.tail1234.ts.net", "8.8.8.8:22")) {
+      val e = assertThrows(TailscaleOff::class.java) { runBlocking { SshShell(address, "test").run("true") } }
+      assertEquals("Tailscale is off", e.message)
+    }
   }
 
   @Test

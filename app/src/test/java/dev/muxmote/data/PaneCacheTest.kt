@@ -76,4 +76,14 @@ class PaneCacheTest {
     val saver = thread { repeat(50) { cache.save(host, "main", big) } }
     while (saver.isAlive) assertEquals(big, cache.load(host, "main"))
   }
+
+  @Test
+  fun retainDeletesScrollbackOfOtherHosts() {
+    val deleted = Host("mac", "mac", "ilia")
+    cache.save(host, "main", state("kept"))
+    cache.save(deleted, "main", state("gone"))
+    cache.retain(listOf(host))
+    assertEquals(listOf(host.id), dir.list()!!.toList())
+    assertEquals(state("kept"), cache.load(host, "main"))
+  }
 }

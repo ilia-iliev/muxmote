@@ -2,6 +2,8 @@ package dev.muxmote.remote
 
 // Helpers for tests that drive tmux through a test shell (LocalShell or SshServer.shell()).
 
+suspend fun Shell.run(command: String) = run(command, "")
+
 private fun target(session: String) = quote("=$session:")
 
 /** Starts [session], 60x20, running plain sh. */
