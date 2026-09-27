@@ -123,6 +123,24 @@ class SshShellTest {
   }
 
   @Test
+  fun connectingToAnUnresponsiveServerTimesOut() {
+    paused { assertLost("No response in 10 s") { shell.run("true") } }
+  }
+
+  @Test
+  fun refusedChannelFailsFastWithTheReason() = runBlocking {
+    val refusing = server.refusingShell()
+    try {
+      val start = System.nanoTime()
+      val e = assertThrows(ChannelRefused::class.java) { runBlocking { refusing.run("true") } }
+      assertEquals("The server refused the channel (reason 2)", e.message)
+      assertTrue(System.nanoTime() - start < 5_000_000_000)
+    } finally {
+      refusing.close()
+    }
+  }
+
+  @Test
   fun droppedConnectionMidCommandIsLost() = runBlocking {
     shell.run("true")
     val running = async(Dispatchers.Default) { runCatching { shell.run("sleep 2") } }

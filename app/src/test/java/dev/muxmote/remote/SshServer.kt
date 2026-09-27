@@ -39,12 +39,11 @@ class SshServer : ExternalResource() {
 
   fun exec(vararg command: String) = docker("exec", name, *command)
 
-  /** A second sshd in the container that offers no compression, like Tailscale SSH. Reached on the container's own address. */
-  fun uncompressedShell(): SshShell {
-    exec("/usr/sbin/sshd", "-p", "2222", "-o", "Compression=no")
-    val ip = docker("inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", name).trim()
-    return SshShell("$ip:2222", USER)
-  }
+  /** A second sshd in the container that offers no compression, like Tailscale SSH. */
+  fun uncompressedShell() = extraShell(2222, "Compression=no")
+
+  /** A second sshd in the container that refuses every session channel. */
+  fun refusingShell() = extraShell(2223, "MaxSessions=0")
 
   fun sentBytes() = exec("cat", "/sys/class/net/eth0/statistics/tx_bytes").trim().toLong()
 
@@ -67,6 +66,13 @@ class SshServer : ExternalResource() {
       Thread.sleep(100)
     }
     error("sshd did not come up")
+  }
+
+  /** Starts another sshd in the container with [option], reached on the container's own address. */
+  private fun extraShell(port: Int, option: String): SshShell {
+    exec("/usr/sbin/sshd", "-p", "$port", "-o", option)
+    val ip = docker("inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", name).trim()
+    return SshShell("$ip:$port", USER)
   }
 
   private fun connect(user: String = USER) = SshShell("127.0.0.1:$port", user)
