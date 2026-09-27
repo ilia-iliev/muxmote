@@ -31,21 +31,34 @@ val DEFAULT_SHORTCUTS =
     Shortcut("PgDn", "NPage"),
   )
 
-class Setting<T>(context: Context, private val key: String, private val serializer: KSerializer<T>, default: T) {
+interface Store {
+  fun get(key: String): String?
+
+  fun set(key: String, value: String)
+}
+
+class PrefsStore(context: Context) : Store {
   private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-  private val state = MutableStateFlow(prefs.getString(key, null)?.let { Json.decodeFromString(serializer, it) } ?: default)
+
+  override fun get(key: String) = prefs.getString(key, null)
+
+  override fun set(key: String, value: String) = prefs.edit().putString(key, value).apply()
+}
+
+class Setting<T>(private val store: Store, private val key: String, private val serializer: KSerializer<T>, default: T) {
+  private val state = MutableStateFlow(store.get(key)?.let { Json.decodeFromString(serializer, it) } ?: default)
   val flow: StateFlow<T> = state
 
   var value: T
     get() = state.value
     set(value) {
-      prefs.edit().putString(key, Json.encodeToString(serializer, value)).apply()
+      store.set(key, Json.encodeToString(serializer, value))
       state.value = value
     }
 }
 
-class Settings(context: Context) {
-  val hosts = Setting(context, "hosts", ListSerializer(Host.serializer()), emptyList())
-  val shortcuts = Setting(context, "shortcuts", ListSerializer(Shortcut.serializer()), DEFAULT_SHORTCUTS)
-  val fontSize = Setting(context, "fontSize", Float.serializer(), 11f)
+class Settings(store: Store) {
+  val hosts = Setting(store, "hosts", ListSerializer(Host.serializer()), emptyList())
+  val shortcuts = Setting(store, "shortcuts", ListSerializer(Shortcut.serializer()), DEFAULT_SHORTCUTS)
+  val fontSize = Setting(store, "fontSize", Float.serializer(), 11f)
 }
