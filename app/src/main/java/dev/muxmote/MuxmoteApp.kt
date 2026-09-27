@@ -11,6 +11,7 @@ import dev.muxmote.remote.Tmux
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class MuxmoteApp : Application() {
   lateinit var settings: Settings
@@ -20,19 +21,15 @@ class MuxmoteApp : Application() {
   /** Outlives screens, for cleanup that must finish after the user leaves (restoring window sizes). */
   val scope = CoroutineScope(SupervisorJob())
 
-  private val shells = mutableMapOf<Host, SshShell>()
+  private val connections = Connections({ SshShell(it.address, it.user) }, SshShell::close)
 
   override fun onCreate() {
     super.onCreate()
     settings = Settings(PrefsStore(this))
     paneCache = PaneCache(File(filesDir, "panes"))
     tailscale = Tailscale(this)
+    scope.launch { settings.hosts.flow.collect(connections::retain) }
   }
 
-  /** Connections are reused per host and replaced when the host is edited. */
-  @Synchronized
-  fun tmux(host: Host): Tmux {
-    shells.keys.filter { it.id == host.id && it != host }.forEach { shells.remove(it)!!.close() }
-    return Tmux(shells.getOrPut(host) { SshShell(host.address, host.user) })
-  }
+  fun tmux(host: Host) = Tmux(connections[host])
 }
