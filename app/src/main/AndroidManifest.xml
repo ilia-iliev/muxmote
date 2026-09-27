@@ -18,7 +18,7 @@
         android:theme="@style/Theme.Muxmote">
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode|density|fontScale|locale"
             android:windowSoftInputMode="adjustResize"
             android:exported="true">
             <intent-filter>

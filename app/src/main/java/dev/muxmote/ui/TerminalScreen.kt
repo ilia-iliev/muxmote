@@ -43,6 +43,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -67,9 +68,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.muxmote.MuxmoteApp
 import dev.muxmote.data.Host
 import dev.muxmote.data.Shortcut
@@ -78,11 +76,10 @@ import dev.muxmote.term.Line
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> Unit) {
-  val model = remember { TerminalModel(app.tmux(host), session, { app.paneCache.load(host, session) }, { app.paneCache.save(host, session, it) }, app.scope) }
+  val model = remember { TerminalModel(app.tmux(host), session, app.sessionLocks[host.id, session], { app.paneCache.load(host, session) }, { app.paneCache.save(host, session, it) }, app.scope) }
   val shortcuts by app.settings.shortcuts.flow.collectAsState()
   val fontSize by app.settings.fontSize.flow.collectAsState()
-  val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
-  val resumed = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
+  val resumed = isResumed()
   val input = remember { FocusRequester() }
   val keyboard = LocalSoftwareKeyboardController.current
 
@@ -106,19 +103,17 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
       val measurer = rememberTextMeasurer()
       val cell = remember(textStyle) { measurer.measure("0".repeat(100), textStyle, softWrap = false).size.let { it.width / 100f to it.height.toFloat() } }
       BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().background(TermBackground)) {
-        // Size the tmux window to the screen without the keyboard, so opening it doesn't reflow the agent.
         val cols = (constraints.maxWidth / cell.first).toInt()
         val rows = (constraints.maxHeight / cell.second).toInt()
         val imeVisible = WindowInsets.isImeVisible
-        var screenRows by remember { mutableIntStateOf(rows) }
+        var grid by remember { mutableStateOf(Grid(cols, rows)) }
         LaunchedEffect(cols, rows, imeVisible) {
-          if (imeVisible) return@LaunchedEffect
-          screenRows = rows
-          model.resize(cols, rows)
+          grid = grid.resized(cols, rows, imeVisible)
+          model.resize(grid)
         }
         TerminalLines(
           model.lines,
-          screenRows,
+          grid.rows,
           rows,
           textStyle,
           onTap = {
@@ -152,7 +147,7 @@ private fun TerminalLines(lines: List<Line>, screenRows: Int, rows: Int, textSty
     LazyColumn(state = list, modifier = Modifier.fillMaxSize().onSizeChanged { height = it.height }.pointerInput(Unit) { detectTapGestures { onTap() } }) {
       items(lines.size) { i ->
         val line = lines[i]
-        Text(remember(line) { line.annotated() }, style = textStyle)
+        Text(remember(line) { line.annotated() }, style = textStyle, softWrap = false, maxLines = 1)
       }
     }
     if (!follow) JumpToBottom { follow = true }
@@ -199,7 +194,7 @@ private fun KeyEvent.onEnter(submit: () -> Unit, newline: () -> Unit): Boolean {
 
 @Composable
 private fun InputBar(focus: FocusRequester, onSubmit: (String) -> Unit) {
-  var text by remember { mutableStateOf(TextFieldValue()) }
+  var text by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
   val submit = {
     onSubmit(text.text)
     text = TextFieldValue()

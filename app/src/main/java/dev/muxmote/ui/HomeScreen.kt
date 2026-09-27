@@ -37,9 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.muxmote.MuxmoteApp
 import dev.muxmote.data.Host
 import dev.muxmote.remote.TmuxSession
@@ -51,8 +48,7 @@ fun HomeScreen(app: MuxmoteApp, onOpen: (Host, String) -> Unit, onSettings: () -
   val tailscaleUp by app.tailscale.connected.collectAsState()
   val scope = rememberCoroutineScope()
   val model = remember { HomeModel(app::tmux, scope) }
-  val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
-  val resumed = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
+  val resumed = isResumed()
 
   LaunchedEffect(resumed, hosts, tailscaleUp) {
     if (!resumed) return@LaunchedEffect

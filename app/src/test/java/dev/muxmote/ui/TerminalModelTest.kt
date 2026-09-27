@@ -22,9 +22,11 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -51,7 +53,11 @@ class TerminalModelTest {
   private var saved: PaneState? = null
   private val appScope = CoroutineScope(time.dispatcher + SupervisorJob())
   private val screenScope = CoroutineScope(time.dispatcher + SupervisorJob())
-  private val model = TerminalModel(tmux, session, { load() }, { saved = it }, appScope)
+  private val lock = Mutex()
+  private val model = newModel()
+
+  /** Another model on the same session, as after Back and a re-tap or a recreated activity. */
+  private fun newModel() = TerminalModel(tmux, session, lock, { load() }, { saved = it }, appScope).apply { resize(Grid(30, 10)) }
 
   private fun texts() = model.lines.map { it.text }
 
@@ -68,7 +74,6 @@ class TerminalModelTest {
   @Before
   fun setUp() = runBlocking {
     local.startSession(session)
-    model.resize(30, 10)
   }
 
   @After
@@ -202,5 +207,42 @@ class TerminalModelTest {
     before = { if ("window-size" in it) throw IOException("gone") }
     resumeAndSync().cancel()
     time.until { saved != null }
+  }
+
+  @Test
+  fun newModelWaitsForThePreviousHandBack() = runBlocking {
+    before = { if ("window-size" in it) delay(500) }
+    resumeAndSync().cancel()
+    var cached: PaneState? = null
+    load = { (saved ?: PaneState()).also { cached = it } }
+    val next = newModel()
+    screenScope.launch { next.poll() }
+    time.until(upTo = time.now + 2 * POLL_MS) { count("window-size") == 1 && count("resize-window") == 2 && next.lines.size == 10 }
+    assertTrue(local.sizePinned(session))
+    assertEquals(model.lines, cached!!.lines)
+  }
+
+  @Test
+  fun sendsArriveInCallOrder() = runBlocking {
+    resumeAndSync()
+    // cat echoes the typed line, then prints it.
+    model.submit("exec cat")
+    repeat(5) {
+      model.keys(Shortcut("k", "k $it"))
+      model.submit("p$it")
+    }
+    val typed = Regex("k\\dp\\d")
+    time.until(upTo = time.now + 2 * POLL_MS) { texts().count { typed.matches(it) } == 10 }
+    assertEquals(List(5) { "k${it}p$it" }.flatMap { listOf(it, it) }, texts().filter { typed.matches(it) })
+    assertNull(model.error)
+  }
+
+  @Test
+  fun savesBeforeRestoring() = runBlocking {
+    var savedFirst: Boolean? = null
+    before = { if ("window-size" in it) savedFirst = saved != null }
+    resumeAndSync().cancel()
+    time.until { savedFirst != null }
+    assertEquals(true, savedFirst)
   }
 }
