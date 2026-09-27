@@ -97,3 +97,30 @@ The repo is in git (local only, branch `main`). Agents work in worktrees on thei
 - An independent architecture/correctness review.
 
 **Next:** a final architecture and code review, then an update to the to-do list below.
+
+**Review findings (2026-09-27), to fix in the next wave:**
+
+- **F1:** a quick re-entry's resize races the previous model's restore. Needs an app-level lock per session.
+- **F2:** a width change (rotation, font) duplicates scrollback. tmux reflows history, so the merge fails and the mirror appends.
+- **F3:** `clear` loses the last screenful.
+- **F4:** sends can reorder, and concurrent submits share the paste buffer.
+- **F5:** non-ASCII session names break under the C locale. Use `tmux -u`.
+- **F6:** connect through the Tailscale Network socket factory. There's no host-key pinning, so an impostor is possible when the tunnel is off.
+- **F7:** `allowBackup` backs up the scrollback cache.
+- **F8:** rows soft-wrap. Needs `softWrap=false`, and an IME gate on rows only.
+- **F9:** commands have no timeout, and the "exit -1" message is unclear.
+- **F10:**
+  - Save the cache before restoring the window size.
+  - Use rememberSaveable for the input.
+  - Handle a SerializationException on cache load.
+  - `configChanges` should also cover uiMode, density and fontScale.
+- **F11:** ANSI: SGR 58, SO/SI ACS line drawing, hidden (8).
+- **F12:** `send-keys --`.
+- **F13:** Tailscale refresh threading and the initial-state flash. `SshShell.close` races connect.
+- **F14:** weak tests (clear, rotation, leaving while loading) and real sleeps in `TmuxTest.type`.
+- **F15:**
+  - Move PaneState to `term`.
+  - A typed auth error.
+  - Unused dependencies and XMLs.
+  - Duplicated test helpers.
+  - Cache cleanup for deleted hosts and sessions.
