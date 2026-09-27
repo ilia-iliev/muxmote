@@ -5,8 +5,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.ClassRule
 import org.junit.Test
@@ -71,6 +73,13 @@ class TmuxTest(kind: String) {
   }
 
   @Test
+  fun snapshotOfMissingSessionFailsWithTmuxError() = runBlocking {
+    shell.startSession("other")
+    val e = assertThrows(CommandFailed::class.java) { runBlocking { tmux.snapshot(session, 0, "") } }
+    assertEquals("can't find session: $session", e.message)
+  }
+
+  @Test
   fun submitPastesMultilineTextAndPressesEnter() = runBlocking {
     startSession()
     type("echo \"it's\"\necho two")
@@ -89,6 +98,17 @@ class TmuxTest(kind: String) {
     assertTrue(snap.truncated)
     val numbers = (snap.history + snap.screen).texts().mapNotNull { it.toIntOrNull() }
     assertEquals((numbers.first()..5000).toList(), numbers)
+  }
+
+  @Test
+  fun firstSnapshotOfAFullScrollbackFetchesAllOfIt() = runBlocking {
+    startSession(historyLimit = 1000)
+    type("seq 1 900 | sed 's/$/ ${"x".repeat(40)}/'")
+    // Rewrapping to the phone width pushes the scrollback past its limit, as on a real first open.
+    tmux.resize(session, 30, 20)
+    val snap = tmux.snapshot(session, 0, "")!!
+    assertTrue(snap.historySize > 1000)
+    assertFalse(snap.truncated)
   }
 
   @Test

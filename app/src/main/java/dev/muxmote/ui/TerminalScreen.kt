@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -40,9 +39,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -64,7 +65,6 @@ import dev.muxmote.MuxmoteApp
 import dev.muxmote.data.Host
 import dev.muxmote.data.Shortcut
 import dev.muxmote.term.Line
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -93,7 +93,6 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
     }
   ) { padding ->
     Column(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
-      model.error?.let { ErrorBar(it) }
       val textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = fontSize.sp, lineHeight = (fontSize * 1.2f).sp, color = TermForeground)
       val measurer = rememberTextMeasurer()
       val cell = remember(textStyle) { measurer.measure("0".repeat(100), textStyle, softWrap = false).size.let { it.width / 100f to it.height.toFloat() } }
@@ -102,15 +101,24 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
         val cols = (constraints.maxWidth / cell.first).toInt()
         val rows = (constraints.maxHeight / cell.second).toInt()
         val imeVisible = WindowInsets.isImeVisible
-        LaunchedEffect(cols, rows, imeVisible) { if (!imeVisible) model.resize(cols, rows) }
+        var screenRows by remember { mutableIntStateOf(rows) }
+        LaunchedEffect(cols, rows, imeVisible) {
+          if (imeVisible) return@LaunchedEffect
+          screenRows = rows
+          model.resize(cols, rows)
+        }
         TerminalLines(
           model.lines,
+          screenRows,
+          rows,
           textStyle,
           onTap = {
             input.requestFocus()
             keyboard?.show()
           },
         )
+        // Drawn over the rows, so an error coming and going doesn't resize the window.
+        model.error?.let { ErrorBar(it) }
       }
       ShortcutBar(shortcuts, model::keys)
       InputBar(input, model::submit)
@@ -119,34 +127,33 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
 }
 
 @Composable
-private fun TerminalLines(lines: List<Line>, textStyle: TextStyle, onTap: () -> Unit) {
+private fun TerminalLines(lines: List<Line>, screenRows: Int, rows: Int, textStyle: TextStyle, onTap: () -> Unit) {
   val list = rememberLazyListState()
   var follow by remember { mutableStateOf(true) }
-  LaunchedEffect(list) { snapshotFlow { list.isScrollInProgress to list.canScrollForward }.collect { (scrolling, more) -> if (scrolling) follow = !more } }
-  LaunchedEffect(lines) { if (follow && lines.isNotEmpty()) list.scrollToItem(lines.lastIndex) }
+  val lastText by rememberUpdatedState(lines.lastText)
+  // Following means the newest text is in view; only the user's scrolling changes it.
+  LaunchedEffect(list) {
+    snapshotFlow { list.isScrollInProgress to (list.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) }
+      .collect { (scrolling, last) -> if (scrolling) follow = last >= lastText }
+  }
+  // The keyboard animates the height through several layouts with the same row count; follow each one.
+  var height by remember { mutableIntStateOf(0) }
+  LaunchedEffect(lines, rows, height, follow) { if (follow) list.scrollToItem(followTop(lines, screenRows, rows)) }
   Box(Modifier.fillMaxSize()) {
-    LazyColumn(state = list, modifier = Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onTap() } }) {
+    LazyColumn(state = list, modifier = Modifier.fillMaxSize().onSizeChanged { height = it.height }.pointerInput(Unit) { detectTapGestures { onTap() } }) {
       items(lines.size) { i ->
         val line = lines[i]
         Text(remember(line) { line.annotated() }, style = textStyle)
       }
     }
-    if (!follow) JumpToBottom(list, lines.lastIndex) { follow = true }
+    if (!follow) JumpToBottom { follow = true }
   }
 }
 
 @Composable
-private fun JumpToBottom(list: LazyListState, last: Int, onJump: () -> Unit) {
-  val scope = rememberCoroutineScope()
+private fun JumpToBottom(onJump: () -> Unit) {
   Box(Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.BottomEnd) {
-    SmallFloatingActionButton(
-      onClick = {
-        onJump()
-        scope.launch { list.scrollToItem(last.coerceAtLeast(0)) }
-      }
-    ) {
-      Icon(Icons.Filled.KeyboardArrowDown, "Jump to bottom")
-    }
+    SmallFloatingActionButton(onClick = onJump) { Icon(Icons.Filled.KeyboardArrowDown, "Jump to bottom") }
   }
 }
 

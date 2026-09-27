@@ -4,6 +4,7 @@ import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -70,8 +71,9 @@ fun HomeScreen(app: MuxmoteApp, onOpen: (Host, String) -> Unit, onSettings: () -
       )
     }
   ) { padding ->
-    PullToRefreshBox(isRefreshing = model.refreshing, onRefresh = { model.refresh(hosts) }, modifier = Modifier.padding(padding).fillMaxSize()) {
-      LazyColumn(Modifier.fillMaxSize()) {
+    PullToRefreshBox(isRefreshing = model.refreshing, onRefresh = { model.refresh(hosts) }, modifier = Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize()) {
+      // The list scrolls under the nav bar; only its last item stops above it.
+      LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = padding.calculateBottomPadding())) {
         if (!tailscaleUp) item { TailscaleOff(onOpen = app.tailscale::openApp) }
         if (hosts.isEmpty()) item { NoHosts(onSettings) }
         hosts.forEach { host ->

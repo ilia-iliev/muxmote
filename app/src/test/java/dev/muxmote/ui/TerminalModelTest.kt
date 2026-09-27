@@ -131,10 +131,25 @@ class TerminalModelTest {
   }
 
   @Test
+  fun sendErrorStaysUntilTheNextSuccessfulSend() = runBlocking {
+    resumeAndSync()
+    before = { if ("send-keys" in it) throw CommandFailed(1, "not a key") }
+    model.keys(Shortcut("x", "Escape"))
+    val polls = captures()
+    time.until(upTo = time.now + 2 * POLL_MS) { captures() >= polls + 2 }
+    assertEquals("not a key", model.error)
+    before = {}
+    model.keys(Shortcut("x", "Escape"))
+    time.until(upTo = time.now + POLL_MS) { model.error == null }
+  }
+
+  @Test
   fun killedSessionShowsAnError() = runBlocking {
     val poll = resumeAndSync()
+    local.startSession("other")
     local.killSession(session)
     time.until(upTo = time.now + POLL_MS) { model.error != null }
+    assertEquals("can't find session: $session", model.error)
     assertTrue(poll.isActive)
   }
 

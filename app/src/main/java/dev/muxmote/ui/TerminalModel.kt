@@ -23,6 +23,17 @@ const val AFTER_INPUT_MS = 150L
 
 private data class Grid(val cols: Int, val rows: Int)
 
+/** Index of the newest row with text. */
+val List<Line>.lastText
+  get() = indexOfLast { it.text.isNotBlank() }
+
+/**
+ * First row to show while following output in [rows] visible rows: the top of the [screenRows]-high pane,
+ * moved down only as far as needed to keep the last text row in view when the keyboard covers the rest.
+ */
+fun followTop(lines: List<Line>, screenRows: Int, rows: Int) =
+  minOf(lines.size - rows, maxOf(lines.size - screenRows, lines.lastText - rows + 1)).coerceAtLeast(0)
+
 /**
  * One tmux session on the terminal screen: mirrors its pane, sizes its window to the phone and sends input.
  * [scope] outlives the screen, so input still gets sent and the window handed back after the user leaves.
@@ -36,8 +47,11 @@ class TerminalModel(private val tmux: Tmux, private val session: String, private
   private var applied: Grid? = null
   var lines by mutableStateOf(emptyList<Line>())
     private set
-  var error by mutableStateOf<String?>(null)
-    private set
+  private var pollError by mutableStateOf<String?>(null)
+  private var sendError by mutableStateOf<String?>(null)
+  /** A failed send stays until a send succeeds; polls running right after it would otherwise hide it. */
+  val error
+    get() = sendError ?: pollError
 
   /** Mirrors the pane until cancelled, then hands the window back to the PC and stores the scrollback. */
   suspend fun poll() {
@@ -46,7 +60,7 @@ class TerminalModel(private val tmux: Tmux, private val session: String, private
       val mirror = mirror ?: loadMirror()
       while (true) {
         // Capturing before the resize would mix PC-width rows into the phone-width scrollback.
-        size?.let { error = sync(mirror, it) }
+        size?.let { pollError = sync(mirror, it) }
         withTimeoutOrNull(POLL_MS) { wake.receive() }
       }
     } finally {
@@ -89,7 +103,7 @@ class TerminalModel(private val tmux: Tmux, private val session: String, private
 
   private fun send(block: suspend () -> Unit) =
     scope.launch {
-      error = remote(block)
+      sendError = remote(block)
       delay(AFTER_INPUT_MS)
       wake.trySend(Unit)
     }
