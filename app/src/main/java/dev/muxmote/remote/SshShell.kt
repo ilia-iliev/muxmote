@@ -10,6 +10,7 @@ import dev.muxmote.net.needsTailnet
 import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.SocketTimeoutException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -33,6 +34,9 @@ class AuthFailed(cause: JSchException) : Exception(cause.message, cause)
 class TailscaleOff : Exception("Tailscale is off")
 
 class ConnectionLost(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+/** [reason] is the SSH open-failure code (RFC 4254 5.1), e.g. 2 when sshd's MaxSessions is reached. */
+class ChannelRefused(reason: Int) : Exception("The server refused the channel (reason $reason)")
 
 /**
  * One long-lived SSH connection per host; every command gets its own exec channel.
@@ -60,7 +64,8 @@ class SshShell(address: String, private val user: String, private val network: (
         try {
           channel.connect(TIMEOUT_MS)
         } catch (e: JSchException) {
-          throw lost(session, e)
+          // JSch reports a refusal like a timeout; only a refusal sets the server's reason code.
+          throw if (channel.exitStatus > 0) ChannelRefused(channel.exitStatus) else lost(session, e)
         }
         // JSch fills both streams from its own thread; polling keeps the wait cancellable.
         withTimeoutOrNull(TIMEOUT_MS.toLong()) { while (!channel.isClosed) delay(5) } ?: throw lost(session)
@@ -106,7 +111,11 @@ class SshShell(address: String, private val user: String, private val network: (
       try {
         connect(TIMEOUT_MS)
       } catch (e: JSchException) {
-        throw if (e.message.orEmpty().startsWith("Auth fail")) AuthFailed(e) else e
+        throw when {
+          e.message.orEmpty().startsWith("Auth fail") -> AuthFailed(e)
+          e.cause is SocketTimeoutException -> lost(this, e)
+          else -> e
+        }
       }
     }
   }
