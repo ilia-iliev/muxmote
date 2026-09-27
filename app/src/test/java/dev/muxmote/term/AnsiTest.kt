@@ -58,4 +58,30 @@ class AnsiTest {
     val line = parse("\u001b]8;;https://x.dev\u001b\\link\u001b]8;;\u0007\u001b[2Kend")[0]
     assertEquals("linkend", line.text)
   }
+
+  @Test
+  fun underlineColorIsConsumedAndIgnored() {
+    val runs = parse("\u001b[4:3m\u001b[58;2;10;20;30mund\u001b[58;5;9;1mx\u001b[58:2::1:2:3;59my")[0].runs
+    assertEquals(listOf(Run("und", Style(attrs = Attr.UNDERLINE)), Run("xy", Style(attrs = Attr.UNDERLINE or Attr.BOLD))), runs)
+  }
+
+  @Test
+  fun shiftOutDrawsLinesAcrossRows() {
+    // As tmux captures `\e(0lqq\e[1mk\e[0mx\e(B plain`: SO/SI bracket the ACS cells, and SO carries across rows.
+    val lines = parse("\u000elq\u001b[1mk\u001b[0mx\u000f plain", "\u000emqj", "tvwu\u000f end")
+    assertEquals(listOf(Run("┌─"), Run("┐", Style(attrs = Attr.BOLD)), Run("│ plain")), lines[0].runs)
+    assertEquals("└─┘", lines[1].text)
+    assertEquals("├┴┬┤ end", lines[2].text)
+  }
+
+  @Test
+  fun dropsControlCharacters() {
+    assertEquals("ab c", parse("a\u0007\u0008b\t\u007f c")[0].text)
+  }
+
+  @Test
+  fun hidden() {
+    val runs = parse("\u001b[8mh\u001b[28mv\u001b[8mh\u001b[0mv")[0].runs
+    assertEquals(listOf(Run("h", Style(attrs = Attr.HIDDEN)), Run("v"), Run("h", Style(attrs = Attr.HIDDEN)), Run("v")), runs)
+  }
 }

@@ -10,12 +10,27 @@ private const val PATH_PREFIX = "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:/usr
 private const val SESSION_FORMAT = "#{session_name}:#{session_windows}:#{session_attached}:#{session_activity}:#{pane_current_command}"
 private val SNAPSHOT_SCRIPT = Tmux::class.java.getResource("/snapshot.sh")!!.readText()
 
+/** The session's current window, matched by exact name. */
+internal fun target(session: String) = quote("=$session:")
+
 data class TmuxSession(val name: String, val windows: Int, val attached: Boolean, val activity: Long, val command: String)
 
-/** One sync of a pane. [history] is the newest part of the scrollback, [screen] the visible rows. */
-data class Snapshot(val hash: String, val historySize: Int, val history: List<Line>, val screen: List<Line>) {
-  val truncated: Boolean
-    get() = history.size < historySize
+/**
+ * One sync of a pane. [history] is the newest part of the scrollback, [screen] the visible rows. [alternate] is true while a
+ * full-screen app has the alternate screen, and then [history] is empty.
+ */
+data class Snapshot(
+  val hash: String,
+  val historySize: Int,
+  val historyLimit: Int,
+  val width: Int,
+  val alternate: Boolean,
+  val history: List<Line>,
+  val screen: List<Line>,
+) {
+  /** True when [history] holds as much of the scrollback as a sync keeps. */
+  val complete: Boolean
+    get() = history.size >= minOf(historySize, MAX_HISTORY)
 }
 
 class Tmux(private val shell: Shell) {
@@ -39,9 +54,9 @@ class Tmux(private val shell: Shell) {
     sh("tmux set-option -wu -t ${target(session)} window-size")
   }
 
-  /** Returns null when the pane is unchanged since the sync that produced [previousHash]. */
-  suspend fun snapshot(session: String, knownHistory: Int, previousHash: String): Snapshot? {
-    val vars = "T=${target(session)} KNOWN=$knownHistory PREV=${quote(previousHash)} MAX=$MAX_HISTORY\n"
+  /** Fetches at least [rows] of history. Returns null when the pane is unchanged since the sync that produced [previousHash]. */
+  suspend fun snapshot(session: String, knownHistory: Int, previousHash: String, rows: Int): Snapshot? {
+    val vars = "T=${target(session)} KNOWN=$knownHistory PREV=${quote(previousHash)} ROWS=$rows MAX=$MAX_HISTORY\n"
     return parseSnapshot(sh(vars + SNAPSHOT_SCRIPT))
   }
 
@@ -59,8 +74,6 @@ class Tmux(private val shell: Shell) {
 
   private suspend fun sh(script: String, stdin: String = "") = shell.run("sh -c " + quote(PATH_PREFIX + script), stdin)
 
-  private fun target(session: String) = quote("=$session:")
-
   private fun parseSession(row: String): TmuxSession {
     val f = row.split(':', limit = 5)
     return TmuxSession(f[0], f[1].toInt(), f[2] != "0", f[3].toLong(), f.getOrElse(4) { "" })
@@ -71,11 +84,11 @@ class Tmux(private val shell: Shell) {
     if (rows[0] == "=") return null
     val requested = rows[0].substringBefore(' ').toInt()
     val hash = rows[0].substringAfter(' ')
-    val (historySize, height) = rows[1].split(' ').map { it.toInt() }
+    val (historySize, historyLimit, height, width, alternate) = rows[1].split(' ').map { it.toInt() }
     val historyRows = minOf(historySize, requested)
     // Command substitution strips trailing blank rows, so pad them back.
     val captured = rows.drop(2) + List(maxOf(0, historyRows + height - (rows.size - 2))) { "" }
     val lines = Ansi.parse(captured)
-    return Snapshot(hash, historySize, lines.take(historyRows), lines.drop(historyRows).take(height))
+    return Snapshot(hash, historySize, historyLimit, width, alternate == 1, lines.take(historyRows), lines.drop(historyRows).take(height))
   }
 }

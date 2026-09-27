@@ -5,9 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.muxmote.data.Shortcut
 import dev.muxmote.remote.PaneMirror
-import dev.muxmote.remote.PaneState
 import dev.muxmote.remote.Tmux
 import dev.muxmote.term.Line
+import dev.muxmote.term.PaneState
 import java.util.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

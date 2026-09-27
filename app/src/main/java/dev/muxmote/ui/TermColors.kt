@@ -40,6 +40,7 @@ private fun Style.span(): SpanStyle {
   var fg = color(fg, TermForeground)
   var bg = color(bg, Color.Unspecified)
   if (has(Attr.REVERSE)) fg = bg.takeOrElse { TermBackground }.also { bg = fg }
+  if (has(Attr.HIDDEN)) fg = bg.takeOrElse { TermBackground }
   if (has(Attr.DIM)) fg = fg.copy(alpha = 0.6f)
   val decorations = listOfNotNull(TextDecoration.Underline.takeIf { has(Attr.UNDERLINE) }, TextDecoration.LineThrough.takeIf { has(Attr.STRIKE) })
   return SpanStyle(
