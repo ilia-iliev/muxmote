@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import dev.muxmote.MuxmoteApp
 import dev.muxmote.data.DEFAULT_SHORTCUTS
 import dev.muxmote.data.Host
@@ -176,8 +177,10 @@ private fun FieldsDialog(fields: Fields, onClose: () -> Unit) {
     action()
     onClose()
   }
+  // The keyboard moves the fields up, so a tap aimed at their old place lands outside and would drop the input.
   AlertDialog(
     onDismissRequest = onClose,
+    properties = DialogProperties(dismissOnClickOutside = false),
     title = { Text(fields.title) },
     text = {
       Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {

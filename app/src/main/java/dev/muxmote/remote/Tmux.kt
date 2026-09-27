@@ -2,6 +2,7 @@ package dev.muxmote.remote
 
 import dev.muxmote.term.Ansi
 import dev.muxmote.term.Line
+import dev.muxmote.term.MAX_HISTORY
 
 // Non-interactive shells often miss user-installed binaries.
 private const val PATH_PREFIX = "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:\$PATH\"\n"
@@ -40,7 +41,7 @@ class Tmux(private val shell: Shell) {
 
   /** Returns null when the pane is unchanged since the sync that produced [previousHash]. */
   suspend fun snapshot(session: String, knownHistory: Int, previousHash: String): Snapshot? {
-    val vars = "T=${target(session)} KNOWN=$knownHistory PREV=${quote(previousHash)}\n"
+    val vars = "T=${target(session)} KNOWN=$knownHistory PREV=${quote(previousHash)} MAX=$MAX_HISTORY\n"
     return parseSnapshot(sh(vars + SNAPSHOT_SCRIPT))
   }
 

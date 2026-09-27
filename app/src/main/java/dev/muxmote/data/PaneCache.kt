@@ -5,13 +5,22 @@ import java.io.File
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+
+// Bump to drop caches written by older builds. Unversioned ones (0) come from builds that fetched far less history.
+private const val VERSION = 1
+private val json = Json { ignoreUnknownKeys = true }
+
+@Serializable private class Stored(val version: Int = 0, val pane: PaneState = PaneState())
 
 /** Scrollback kept on the phone so a session opens instantly and scrolls past what tmux still holds. */
 class PaneCache(private val dir: File) {
   fun load(host: Host, session: String): PaneState {
     val file = file(host, session)
-    return if (file.exists()) Json.decodeFromString(PaneState.serializer(), file.readText()) else PaneState()
+    if (!file.exists()) return PaneState()
+    val stored = json.decodeFromString(Stored.serializer(), file.readText())
+    return if (stored.version == VERSION) stored.pane else PaneState()
   }
 
   /** Writes a temp file and renames it over the old one, so a concurrent [load] or a crash never sees half a file. */
@@ -19,7 +28,7 @@ class PaneCache(private val dir: File) {
     val file = file(host, session)
     file.parentFile!!.mkdirs()
     val temp = File.createTempFile("save", ".tmp", file.parentFile)
-    temp.writeText(Json.encodeToString(PaneState.serializer(), state))
+    temp.writeText(json.encodeToString(Stored.serializer(), Stored(VERSION, state)))
     Files.move(temp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE)
   }
 

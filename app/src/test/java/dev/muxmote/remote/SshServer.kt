@@ -28,6 +28,15 @@ class SshServer : ExternalResource() {
 
   fun exec(vararg command: String) = docker("exec", NAME, *command)
 
+  /** A second sshd in the container that offers no compression, like Tailscale SSH. Reached on the container's own address. */
+  fun uncompressedShell(): SshShell {
+    exec("/usr/sbin/sshd", "-p", "2222", "-o", "Compression=no")
+    val ip = docker("inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", NAME).trim()
+    return SshShell("$ip:2222", "test")
+  }
+
+  fun sentBytes() = exec("cat", "/sys/class/net/eth0/statistics/tx_bytes").trim().toLong()
+
   override fun before() {
     if (!available) return
     docker("build", "-q", "-t", NAME, "src/test/docker")

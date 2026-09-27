@@ -11,6 +11,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private const val TIMEOUT_MS = 8_000
+private const val COMPRESSION = "zlib@openssh.com,zlib,none"
 private val HOST_PORT = Regex("""(?:\[(.+)]|([^:]+))(?::(\d+))?""")
 
 /** Splits `host`, `host:port`, `[ipv6]:port` or a bare IPv6 address; the port defaults to 22. */
@@ -59,6 +60,9 @@ class SshShell(address: String, private val user: String) : Shell {
       session?.takeIf { it.isConnected }
         ?: JSch().getSession(user, host.first, host.second).apply {
           setConfig("StrictHostKeyChecking", "no")
+          // Tailscale SSH offers no compression, so this falls back to none there.
+          setConfig("compression.s2c", COMPRESSION)
+          setConfig("compression.c2s", COMPRESSION)
           serverAliveInterval = 15_000
           connect(TIMEOUT_MS)
           session = this

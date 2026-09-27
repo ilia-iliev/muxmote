@@ -13,6 +13,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.ClassRule
 import org.junit.Test
 
@@ -45,6 +46,25 @@ class SshShellTest {
 
   @Test
   fun largeStdoutAndStderrTogether() = runBlocking { assertEquals(numbers, shell.run("seq 1 200000 | tee /dev/stderr")) }
+
+  @Test
+  fun compressesWhenTheServerOffersItAndConnectsWithoutIt() = runBlocking {
+    val plain = server.uncompressedShell()
+    try {
+      val compressed = sentForSeq(shell)
+      val uncompressed = sentForSeq(plain)
+      assertTrue("$compressed vs $uncompressed bytes", compressed * 3 < uncompressed)
+    } finally {
+      plain.close()
+    }
+  }
+
+  private suspend fun sentForSeq(shell: SshShell): Long {
+    shell.run("true")
+    val before = server.sentBytes()
+    assertEquals(numbers, shell.run("seq 1 200000"))
+    return server.sentBytes() - before
+  }
 
   @Test
   fun concurrentRuns() = runBlocking {
