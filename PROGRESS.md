@@ -53,3 +53,17 @@ Spec: `APP.md`. This file is the handoff between sessions, so keep it current.
 - Only the session's current window and active pane are shown and resized.
 - If the phone disconnects while viewing, the PC window stays phone-sized until the next leave/pause succeeds, or until `tmux set -wu window-size` is run on the PC.
 - Lines tmux drops at `history-limit` between two polls can't be recovered (tmux lost them too).
+
+## Session 2026-09-27 (manager + parallel agents)
+
+The repo is now in git (a local repo, no remote). Agents work in worktrees on their own branches, and the manager merges them into `master`.
+
+- Phase 1, in flight:
+  - (A) Settings screen, MainActivity, manifest, first compile.
+  - (B) Data layer testable on the JVM.
+  - (C) Docker SSH target ("none" auth) and real SshShell tests.
+  - (D) Headless emulator provisioning.
+- Phase 2, planned:
+  - Pull TerminalState/HomeState out into testable classes.
+  - Emulator end-to-end: the app on the emulator connects to the docker sshd+tmux via 10.0.2.2.
+  - A final review pass.
