@@ -8,21 +8,28 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import dev.muxmote.data.Host
 import dev.muxmote.theme.MuxmoteTheme
 import dev.muxmote.ui.HomeScreen
 import dev.muxmote.ui.SettingsScreen
 import dev.muxmote.ui.TerminalScreen
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
+@Serializable
 sealed interface Screen {
-  data object Home : Screen
+  @Serializable data object Home : Screen
 
-  data object Settings : Screen
+  @Serializable data object Settings : Screen
 
-  data class Terminal(val host: Host, val session: String) : Screen
+  @Serializable data class Terminal(val host: Host, val session: String) : Screen
 }
+
+/** Keeps the open screen across activity recreation (dark mode switch, process death). */
+val ScreenSaver = Saver<Screen, String>({ Json.encodeToString(Screen.serializer(), it) }, { Json.decodeFromString(Screen.serializer(), it) })
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,7 +42,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun App(app: MuxmoteApp) {
-  var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+  var screen by rememberSaveable(stateSaver = ScreenSaver) { mutableStateOf<Screen>(Screen.Home) }
   val home = { screen = Screen.Home }
   BackHandler(screen != Screen.Home, home)
   when (val s = screen) {
