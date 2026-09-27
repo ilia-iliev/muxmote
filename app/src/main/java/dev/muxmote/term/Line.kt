@@ -17,6 +17,7 @@ object Attr {
   const val UNDERLINE = 8
   const val REVERSE = 16
   const val STRIKE = 32
+  const val HIDDEN = 64
 }
 
 @Serializable

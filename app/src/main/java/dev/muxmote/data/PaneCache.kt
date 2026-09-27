@@ -1,6 +1,6 @@
 package dev.muxmote.data
 
-import dev.muxmote.remote.PaneState
+import dev.muxmote.term.PaneState
 import java.io.File
 import java.net.URLEncoder
 import java.nio.file.Files
@@ -14,13 +14,17 @@ private val json = Json { ignoreUnknownKeys = true }
 
 @Serializable private class Stored(val version: Int = 0, val pane: PaneState = PaneState())
 
+@Serializable private class Version(val version: Int = 0)
+
 /** Scrollback kept on the phone so a session opens instantly and scrolls past what tmux still holds. */
 class PaneCache(private val dir: File) {
   fun load(host: Host, session: String): PaneState {
     val file = file(host, session)
     if (!file.exists()) return PaneState()
-    val stored = json.decodeFromString(Stored.serializer(), file.readText())
-    return if (stored.version == VERSION) stored.pane else PaneState()
+    // Read the version first: an older schema may no longer decode.
+    val text = file.readText()
+    if (json.decodeFromString(Version.serializer(), text).version != VERSION) return PaneState()
+    return json.decodeFromString(Stored.serializer(), text).pane
   }
 
   /** Writes a temp file and renames it over the old one, so a concurrent [load] or a crash never sees half a file. */

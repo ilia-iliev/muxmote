@@ -2,11 +2,17 @@ package dev.muxmote.term
 
 private const val ESC = '\u001b'
 private const val BEL = '\u0007'
+private const val SO = '\u000e'
+private const val SI = '\u000f'
+// VT100 line drawing: tmux captures these cells as ASCII between SO and SI.
+private const val ACS = "`afgjklmnopqrstuvwxyz{|}~"
+private const val ACS_GLYPHS = "◆▒°±┘┐┌└┼⎺⎻─⎼⎽├┤┴┬│≤≥π≠£·"
 
 /** Parses `tmux capture-pane -e` output. SGR state carries across rows, so parse a capture as a whole. */
 object Ansi {
   fun parse(rows: List<String>): List<Line> {
     var style = Style()
+    var lineDrawing = false
     return rows.map { row ->
       val runs = mutableListOf<Run>()
       val text = StringBuilder()
@@ -20,7 +26,13 @@ object Ansi {
       while (i < row.length) {
         val c = row[i]
         if (c != ESC) {
-          text.append(c)
+          when {
+            c == SO -> lineDrawing = true
+            c == SI -> lineDrawing = false
+            c < ' ' || c == '\u007f' -> {}
+            lineDrawing && c in ACS -> text.append(ACS_GLYPHS[ACS.indexOf(c)])
+            else -> text.append(c)
+          }
           i++
           continue
         }
@@ -72,12 +84,14 @@ object Ansi {
         3 -> style = style.with(Attr.ITALIC)
         4 -> style = if (sub.getOrNull(1) == "0") style.without(Attr.UNDERLINE) else style.with(Attr.UNDERLINE)
         7 -> style = style.with(Attr.REVERSE)
+        8 -> style = style.with(Attr.HIDDEN)
         9 -> style = style.with(Attr.STRIKE)
         21 -> style = style.with(Attr.UNDERLINE)
         22 -> style = style.without(Attr.BOLD or Attr.DIM)
         23 -> style = style.without(Attr.ITALIC)
         24 -> style = style.without(Attr.UNDERLINE)
         27 -> style = style.without(Attr.REVERSE)
+        28 -> style = style.without(Attr.HIDDEN)
         29 -> style = style.without(Attr.STRIKE)
         in 30..37 -> style = style.copy(fg = code - 30)
         39 -> style = style.copy(fg = DEFAULT)
@@ -85,11 +99,13 @@ object Ansi {
         49 -> style = style.copy(bg = DEFAULT)
         in 90..97 -> style = style.copy(fg = code - 90 + 8)
         in 100..107 -> style = style.copy(bg = code - 100 + 8)
-        38, 48 -> {
+        // 58 is the underline colour, which is parsed only to skip its arguments.
+        38, 48, 58 -> {
           val colonForm = sub.size > 1
           val (color, used) = extendedColor(if (colonForm) sub.drop(1) else codes.drop(i + 1), colonForm)
           if (!colonForm) i += used
-          style = if (code == 38) style.copy(fg = color) else style.copy(bg = color)
+          if (code == 38) style = style.copy(fg = color)
+          if (code == 48) style = style.copy(bg = color)
         }
       }
       i++

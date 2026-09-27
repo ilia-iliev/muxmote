@@ -3,7 +3,6 @@ package dev.muxmote.ui
 import dev.muxmote.data.Shortcut
 import dev.muxmote.remote.CommandFailed
 import dev.muxmote.remote.LocalShell
-import dev.muxmote.remote.PaneState
 import dev.muxmote.remote.Shell
 import dev.muxmote.remote.Tmux
 import dev.muxmote.remote.killServer
@@ -12,6 +11,7 @@ import dev.muxmote.remote.sizePinned
 import dev.muxmote.remote.startSession
 import dev.muxmote.remote.windowSize
 import dev.muxmote.term.Line
+import dev.muxmote.term.PaneState
 import dev.muxmote.term.Run
 import java.io.IOException
 import java.util.concurrent.CountDownLatch

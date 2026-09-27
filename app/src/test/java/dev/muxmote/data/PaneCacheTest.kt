@@ -1,8 +1,8 @@
 package dev.muxmote.data
 
-import dev.muxmote.remote.PaneState
 import dev.muxmote.term.Attr
 import dev.muxmote.term.Line
+import dev.muxmote.term.PaneState
 import dev.muxmote.term.Run
 import dev.muxmote.term.Style
 import dev.muxmote.term.rgb
@@ -30,6 +30,14 @@ class PaneCacheTest {
     val file = File(dir, "${host.id}/main.json")
     file.parentFile!!.mkdirs()
     file.writeText(Json.encodeToString(PaneState.serializer(), state("old")))
+    assertEquals(PaneState(), cache.load(host, "main"))
+  }
+
+  @Test
+  fun dropsAnOlderVersionWhoseSchemaNoLongerDecodes() {
+    val file = File(dir, "${host.id}/main.json")
+    file.parentFile!!.mkdirs()
+    file.writeText("""{"pane":{"history":[{"runs":[{"text":"x","style":"red"}]}]}}""")
     assertEquals(PaneState(), cache.load(host, "main"))
   }
 
