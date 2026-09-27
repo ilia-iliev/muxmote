@@ -1,5 +1,6 @@
 package dev.muxmote.ui
 
+import dev.muxmote.remote.AuthFailed
 import java.net.UnknownHostException
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -18,5 +19,5 @@ private fun describe(e: Exception): String {
   // JSch wraps it as "java.net.UnknownHostException: <host>".
   generateSequence<Throwable>(e) { it.cause }.filterIsInstance<UnknownHostException>().firstOrNull()?.let { return "Unknown host: ${it.message}" }
   val message = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
-  return if ("Auth fail" in message) "$message\nTurn on Tailscale SSH on the host: sudo tailscale set --ssh" else message
+  return if (e is AuthFailed) "$message\nTurn on Tailscale SSH on the host: sudo tailscale set --ssh" else message
 }

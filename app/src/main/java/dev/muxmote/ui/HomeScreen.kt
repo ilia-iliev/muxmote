@@ -52,7 +52,6 @@ fun HomeScreen(app: MuxmoteApp, onOpen: (Host, String) -> Unit, onSettings: () -
 
   LaunchedEffect(resumed, hosts, tailscaleUp) {
     if (!resumed) return@LaunchedEffect
-    app.tailscale.refresh()
     model.refresh(hosts)
   }
 

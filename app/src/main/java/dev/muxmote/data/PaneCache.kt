@@ -37,4 +37,7 @@ class PaneCache(private val dir: File) {
   }
 
   private fun file(host: Host, session: String) = File(dir, "${host.id}/${URLEncoder.encode(session, "UTF-8")}.json")
+
+  /** Deletes the scrollback of hosts not in [hosts]. The directory is missing until the first save. */
+  fun retain(hosts: List<Host>) = dir.listFiles().orEmpty().filter { it.name !in hosts.map(Host::id) }.forEach { it.deleteRecursively() }
 }
