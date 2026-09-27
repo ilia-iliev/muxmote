@@ -5,7 +5,7 @@ The spec is in `APP.md`. This file is the handoff between sessions, so keep it c
 ## Status (2026-09-27)
 
 Every feature in the spec is implemented.
-- **Tests:** 129 JVM tests pass. They cover real tmux both locally and through a Docker sshd.
+- **Tests:** 131 JVM tests pass. They cover real tmux both locally and through a Docker sshd.
 - **Emulator:** it was checked against the Docker sshd.
 - **Not tested yet:** a real phone on a real tailnet (see To do).
 
@@ -46,7 +46,7 @@ Every feature in the spec is implemented.
   - `History.merge`.
 - `remote/`:
   - `Shell` is the interface.
-  - `SshShell`: JSch, one session per host with an exec channel per command; 10 s timeouts; typed errors `AuthFailed`, `TailscaleOff` and `ConnectionLost`.
+  - `SshShell`: JSch, one session per host with an exec channel per command; 10 s timeouts; typed errors `AuthFailed`, `TailscaleOff`, `ConnectionLost` and `ChannelRefused`.
   - `Tmux`: the commands, plus `app/src/main/resources/snapshot.sh`.
   - `PaneMirror`: `sync()` pulls a snapshot and merges it into `PaneState`.
 - `data/`:
@@ -87,6 +87,11 @@ Every feature in the spec is implemented.
 3. **Optional:** self-heal the window size. Add `#{window_width}x#{window_height}` to the snapshot header and re-apply the resize when it doesn't match. The lock already covers our own races; this would cover other resizers.
 
 ## Known limits
+
+- Minor UI issues found in the final QA:
+  - "Jump to bottom" can be ignored if you tap it during a fling. That's the likely cause, but it isn't confirmed.
+  - A sliver of the row above shows at the top, because the row count rounds down.
+  - The refusal message shows the reason code as a number.
 
 - Only the session's current window and its active pane are shown and resized. The cursor isn't drawn.
 - If the phone dies while viewing, the PC window stays phone-sized until the next leave/pause succeeds, or until you run `tmux set -wu window-size`.
