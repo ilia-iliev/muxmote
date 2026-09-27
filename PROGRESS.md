@@ -73,8 +73,27 @@ The repo is in git (local only, branch `main`). Agents work in worktrees on thei
   - The poll loop applies the resize before each capture, and a lock serializes restore against the next resume.
   - The latest refresh per host wins.
 
+**Also merged (90 tests):**
+- **Emulator QA:**
+  - Screen saved with `rememberSaveable`.
+  - Settings dialog scrolls, and asks before resetting to defaults.
+- **Tailscale:**
+  - Open falls back to the Play Store.
+  - Detection comes from the VPN callback's link properties. Research found that addresses aren't redacted for non-owner apps, so there's no VPN-only fallback.
+  - `Connections` closes connections to deleted hosts.
+- **Terminal e2e on the emulator against docker:** every checklist item passed. Fixes:
+  - A killed session shows tmux's error.
+  - Send errors stay visible.
+  - The first sync fetches the full history.
+  - `followTop` keeps the last row visible when the keyboard opens.
+  - The error bar overlays instead of resizing.
+  - "Unknown host" message.
+
 **In flight:**
-- Emulator UI check of the settings, home, rotation and theme screens, on `emulator-5554`.
-- Terminal end-to-end on a second AVD, `muxmote2` (`emulator-5556`), against the docker sshd. Also: a clear error when a session is killed, and send errors staying visible.
+- First-sync cap raised to MAX_HISTORY, plus SSH compression.
+- Settings dialog: no dismiss on outside tap.
+- Hardware Enter sends.
+- Stale cache version.
+- An independent architecture/correctness review.
 
 **Next:** a final architecture and code review, then an update to the to-do list below.
