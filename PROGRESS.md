@@ -17,7 +17,10 @@ Spec: `APP.md`. This file is the handoff between sessions, so keep it current.
 - SDK: `~/Android/Sdk`, installed via cmdline-tools. Use the `android` CLI; `sdkmanager` is deprecated.
 - Build: `export JAVA_HOME=/opt/android-studio/jbr; ./gradlew :app:assembleDebug`
 - Tests: `./gradlew :app:testDebugUnitTest`. The tmux integration tests run the real local tmux on an isolated `TMUX_TMPDIR`.
-- SSH e2e test (opt-in): `MUXMOTE_SSH_HOST=100.106.4.86 ./gradlew :app:testDebugUnitTest --tests '*SshShellTest*'`. It currently fails with `Auth fail for methods 'publickey,password'` because this PC has `RunSSH: false`. The user has to run `sudo tailscale set --ssh`.
+- SSH tests: `TmuxTest` runs every case twice, once as `[local]` and once as `[ssh]`. The `[ssh]` run goes through `SshShell` to a Docker sshd+tmux (`app/src/test/docker`; user `test`, "none" auth like Tailscale SSH, bound to 127.0.0.1:22022). The JUnit rule `SshServer` starts and stops it. If docker is unavailable, those cases are skipped.
+  - Manual start: `docker build -t muxmote-sshd app/src/test/docker && docker run -d --rm --name muxmote-sshd -p 127.0.0.1:22022:22 muxmote-sshd`
+  - Host addresses accept `host:port`.
+- Emulator: AVD `muxmote` (API 36, `emulator-5554`). Use `~/Android/Sdk/platform-tools/adb`, not the `/usr/bin/adb` on PATH. The emulator reaches the host at `10.0.2.2`.
 - tmux on this PC is `~/.local/bin/tmux` 3.6b. The remote commands prepend `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin` to PATH and run under `sh -c`.
 
 ## Done
