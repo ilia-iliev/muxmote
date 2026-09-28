@@ -99,3 +99,8 @@ Every feature in the spec is implemented.
 - If the phone dies while viewing, the PC window stays phone-sized until the next leave/pause succeeds, or until you run `tmux set -wu window-size`.
 - Rows tmux drops at `history-limit` between two polls can't be recovered. If the width changes after the remote history has rotated past the cached rows, those old local rows are dropped.
 - Tailscale SSH has no compression. The first full sync is about 350–550 KB for a 10k-row history.
+
+## Release
+
+- `./gradlew :app:bundleRelease` builds a signed AAB. The upload key is `~/.android-keys/muxmote-upload.jks` (alias `upload`); its path and password are in `~/.gradle/gradle.properties`. Play App Signing holds the app key.
+- Bump `versionCode` in `app/build.gradle.kts` for every upload.

@@ -15,8 +15,19 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("upload") {
+            val password = providers.gradleProperty("MUXMOTE_UPLOAD_PASSWORD").orNull
+            storeFile = providers.gradleProperty("MUXMOTE_UPLOAD_STORE_FILE").orNull?.let(::file)
+            storePassword = password
+            keyAlias = "upload"
+            keyPassword = password
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("upload")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
