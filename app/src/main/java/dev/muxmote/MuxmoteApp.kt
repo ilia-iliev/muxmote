@@ -5,6 +5,7 @@ import dev.muxmote.data.Host
 import dev.muxmote.data.PaneCache
 import dev.muxmote.data.PrefsStore
 import dev.muxmote.data.Settings
+import dev.muxmote.data.retainHosts
 import dev.muxmote.net.Tailscale
 import dev.muxmote.remote.SshShell
 import dev.muxmote.remote.Tmux
@@ -23,7 +24,9 @@ class MuxmoteApp : Application() {
   val scope = CoroutineScope(SupervisorJob())
   val sessionLocks = SessionLocks()
 
-  private val connections = Connections({ SshShell(it.address, it.user) { tailscale.network } }, { scope.launch { it.close() } })
+  // One known_hosts file per host, so deleting a machine and adding it again trusts its new key.
+  private val knownHosts by lazy { File(filesDir, "known_hosts") }
+  private val connections = Connections({ SshShell(it.address, it.user, File(knownHosts, it.id)) { tailscale.network } }, { scope.launch { it.close() } })
 
   override fun onCreate() {
     super.onCreate()
@@ -34,6 +37,7 @@ class MuxmoteApp : Application() {
       settings.hosts.flow.collect {
         connections.retain(it)
         paneCache.retain(it)
+        retainHosts(knownHosts, it)
       }
     }
   }

@@ -1,5 +1,9 @@
 package dev.muxmote.remote
 
+import com.jcraft.jsch.HostKey
+import com.jcraft.jsch.JSch
+import com.jcraft.jsch.KeyPair
+import java.io.File
 import java.net.ServerSocket
 import kotlinx.coroutines.runBlocking
 import org.junit.Assume.assumeTrue
@@ -7,6 +11,9 @@ import org.junit.rules.ExternalResource
 
 private const val IMAGE = "muxmote-sshd"
 private const val USER = "test"
+
+/** An empty known_hosts file, so each shell pins keys on its own. */
+fun knownHosts(): File = File.createTempFile("known_hosts", null).apply { deleteOnExit() }
 
 /**
  * Runs the sshd + tmux container from src/test/docker. Tests that need it are skipped when docker is unavailable.
@@ -17,10 +24,20 @@ class SshServer : ExternalResource() {
   private val name = "$IMAGE-${ProcessHandle.current().pid()}"
   private val port = ServerSocket(0).use { it.localPort }
 
-  fun shell(user: String = USER): SshShell {
+  fun shell(user: String = USER, knownHosts: File = knownHosts()): SshShell {
     assumeTrue("docker is unavailable", available)
-    return connect(user)
+    return connect(user, knownHosts)
   }
+
+  /** How known_hosts names this server. */
+  val hostKeyName = "[127.0.0.1]:$port"
+
+  /** A known_hosts file that pins another ed25519 key for this server, as if an impostor answered. */
+  fun forgedKnownHosts(): File =
+    knownHosts().also { file ->
+      val jsch = JSch().apply { setKnownHosts(file.path) }
+      jsch.hostKeyRepository.add(HostKey(hostKeyName, KeyPair.genKeyPair(jsch, KeyPair.ED25519).publicKeyBlob), null)
+    }
 
   /** Kills the per-connection sshd processes, like a network drop. */
   fun dropConnections() = exec("pkill", "sshd-session")
@@ -72,10 +89,10 @@ class SshServer : ExternalResource() {
   private fun extraShell(port: Int, option: String): SshShell {
     exec("/usr/sbin/sshd", "-p", "$port", "-o", option)
     val ip = docker("inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", name).trim()
-    return SshShell("$ip:$port", USER)
+    return SshShell("$ip:$port", USER, knownHosts())
   }
 
-  private fun connect(user: String = USER) = SshShell("127.0.0.1:$port", user)
+  private fun connect(user: String = USER, knownHosts: File = knownHosts()) = SshShell("127.0.0.1:$port", user, knownHosts)
 
   private fun docker(vararg args: String): String {
     val process = ProcessBuilder("docker", *args).redirectErrorStream(true).start()

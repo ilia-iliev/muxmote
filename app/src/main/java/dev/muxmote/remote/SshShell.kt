@@ -6,8 +6,11 @@ import com.jcraft.jsch.JSch
 import com.jcraft.jsch.JSchException
 import com.jcraft.jsch.Session
 import com.jcraft.jsch.SocketFactory
+import com.jcraft.jsch.UserInfo
 import dev.muxmote.net.needsTailnet
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.net.ConnectException
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
@@ -29,7 +32,19 @@ internal fun hostPort(address: String): Pair<String, Int> {
   return bracketed.ifEmpty { plain } to (port.toIntOrNull() ?: 22)
 }
 
+/** The first label of a hostname, or the whole address for an IP. */
+internal fun shortName(address: String): String {
+  val host = hostPort(address).first
+  val label = host.substringBefore('.')
+  return if (':' in host || label.all { it.isDigit() }) host else label
+}
+
 class AuthFailed(cause: JSchException) : Exception(cause.message, cause)
+
+class SshOff(host: String, cause: JSchException) : Exception("Nothing answers SSH on $host", cause)
+
+class HostKeyChanged(host: String, cause: JSchException) :
+  Exception("The host key of $host changed. Someone may be impersonating it. If you reinstalled it, delete the machine and add it again.", cause)
 
 class TailscaleOff : Exception("Tailscale is off")
 
@@ -41,10 +56,11 @@ class ChannelRefused(reason: Int) : Exception("The server refused the channel (r
 /**
  * One long-lived SSH connection per host; every command gets its own exec channel.
  * Authentication is left to Tailscale SSH, which accepts the "none" method for tailnet peers.
- * Host keys are not pinned: WireGuard authenticates the peer, so everything except private-LAN
- * literals goes only through the tailnet [network] (null while Tailscale is off).
+ * Everything except private-LAN literals goes only through the tailnet [network] (null while Tailscale is off).
+ * The first host key is pinned in [knownHosts] and a different one is refused, which also covers LAN hosts,
+ * subnet routes and exit nodes, where WireGuard doesn't authenticate the far end.
  */
-class SshShell(address: String, private val user: String, private val network: () -> Network? = { null }) : Shell {
+class SshShell(address: String, private val user: String, private val knownHosts: File, private val network: () -> Network? = { null }) : Shell {
   private val host = hostPort(address)
   private val mutex = Mutex()
   private var session: Session? = null
@@ -101,9 +117,15 @@ class SshShell(address: String, private val user: String, private val network: (
 
   private fun connect(): Session {
     val tailnet = if (needsTailnet(host.first)) network() ?: throw TailscaleOff() else null
-    return JSch().getSession(user, host.first, host.second).apply {
+    knownHosts.parentFile!!.mkdirs()
+    val jsch = JSch().apply { setKnownHosts(knownHosts.path) }
+    return jsch.getSession(user, host.first, host.second).apply {
       tailnet?.let { setSocketFactory(Through(it)) }
-      setConfig("StrictHostKeyChecking", "no")
+      // "ask" with a yes-saying UserInfo is OpenSSH's accept-new: pin an unknown key, refuse a changed one.
+      setConfig("StrictHostKeyChecking", "ask")
+      // Tailscale SSH needs nothing more, and the yes-saying UserInfo must not be asked for a password.
+      setConfig("PreferredAuthentications", "none")
+      userInfo = AcceptNew
       // Tailscale SSH offers no compression, so this falls back to none there.
       setConfig("compression.s2c", COMPRESSION)
       setConfig("compression.c2s", COMPRESSION)
@@ -113,12 +135,32 @@ class SshShell(address: String, private val user: String, private val network: (
       } catch (e: JSchException) {
         throw when {
           e.message.orEmpty().startsWith("Auth fail") -> AuthFailed(e)
+          e.message.orEmpty().startsWith("HostKey has been changed") -> HostKeyChanged(this@SshShell.host.first, e)
+          e.cause is ConnectException -> SshOff(this@SshShell.host.first, e)
           e.cause is SocketTimeoutException -> lost(this, e)
           else -> e
         }
       }
     }
   }
+}
+
+/**
+ * Trusts a host key on first sight. JSch also asks whether to replace a changed key; anything but the two prompts below
+ * is refused, so reworded prompts fail closed.
+ */
+private object AcceptNew : UserInfo {
+  override fun promptYesNo(message: String) = "can't be established" in message || "want to create it?" in message
+
+  override fun getPassphrase() = null
+
+  override fun getPassword() = null
+
+  override fun promptPassword(message: String) = false
+
+  override fun promptPassphrase(message: String) = false
+
+  override fun showMessage(message: String) = Unit
 }
 
 /** Resolves and connects through [network], so neither DNS nor traffic can leak outside the tailnet. */

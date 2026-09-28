@@ -1,6 +1,7 @@
 package dev.muxmote.data
 
 import android.content.Context
+import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,6 +12,9 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
 @Serializable data class Host(val name: String, val address: String, val user: String, val id: String = UUID.randomUUID().toString())
+
+/** Deletes the entries of [dir], named by host id, whose host is not in [hosts]. The directory may not exist yet. */
+fun retainHosts(dir: File, hosts: List<Host>) = dir.listFiles().orEmpty().filter { it.name !in hosts.map(Host::id) }.forEach { it.deleteRecursively() }
 
 /** [keys] are tmux key names separated by spaces, e.g. `Escape` or `C-c`. */
 @Serializable data class Shortcut(val label: String, val keys: String)

@@ -1,6 +1,5 @@
 package dev.muxmote.remote
 
-import com.jcraft.jsch.JSchException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -101,7 +100,7 @@ class SshShellTest {
   fun recoversAfterFailedConnect() = runBlocking {
     shell.run("true")
     server.stop()
-    assertThrows(JSchException::class.java) { runBlocking { shell.run("true") } }
+    assertThrows(SshOff::class.java) { runBlocking { shell.run("true") } }
     server.start()
     assertEquals("ok\n", shell.run("echo ok"))
   }
@@ -177,9 +176,25 @@ class SshShellTest {
   }
 
   @Test
+  fun firstHostKeyIsPinned() = runBlocking {
+    val file = knownHosts()
+    val pinned = server.shell(knownHosts = file)
+    pinned.run("true")
+    pinned.close()
+    assertTrue(file.readText().startsWith(server.hostKeyName + " "))
+    assertEquals("ok\n", server.shell(knownHosts = file).run("echo ok"))
+  }
+
+  @Test
+  fun changedHostKeyIsRefused() {
+    val impostor = server.shell(knownHosts = server.forgedKnownHosts())
+    assertThrows(HostKeyChanged::class.java) { runBlocking { impostor.run("true") } }
+  }
+
+  @Test
   fun tailnetHostsFailFastWithoutTailscale() {
     for (address in listOf("100.64.0.1", "pc", "pc.tail1234.ts.net", "8.8.8.8:22")) {
-      val e = assertThrows(TailscaleOff::class.java) { runBlocking { SshShell(address, "test").run("true") } }
+      val e = assertThrows(TailscaleOff::class.java) { runBlocking { SshShell(address, "test", knownHosts()).run("true") } }
       assertEquals("Tailscale is off", e.message)
     }
   }

@@ -46,9 +46,17 @@ import dev.muxmote.data.DEFAULT_SHORTCUTS
 import dev.muxmote.data.Host
 import dev.muxmote.data.Setting
 import dev.muxmote.data.Shortcut
+import dev.muxmote.remote.shortName
 
-/** What the shared fields dialog edits: [save] gets the trimmed values; [delete] is null when adding. */
-private class Fields(val title: String, val labels: List<String>, val values: List<String>, val save: (List<String>) -> Unit, val delete: (() -> Unit)?)
+/** What the shared fields dialog edits: [save] gets the trimmed values; [delete] is null when adding; [optional] fields may stay blank. */
+private class Fields(
+  val title: String,
+  val labels: List<String>,
+  val values: List<String>,
+  val save: (List<String>) -> Unit,
+  val delete: (() -> Unit)?,
+  val optional: Set<Int>,
+)
 
 private fun <T> Setting<List<T>>.put(index: Int?, item: T) {
   value = if (index == null) value + item else value.toMutableList().also { it[index] = item }
@@ -62,20 +70,38 @@ private fun <T> Setting<List<T>>.move(from: Int, to: Int) {
   value = value.toMutableList().also { it.add(to, it.removeAt(from)) }
 }
 
-private fun <T> Setting<List<T>>.fields(what: String, labels: List<String>, index: Int?, values: (T) -> List<String>, build: (T?, List<String>) -> T): Fields {
+private fun <T> Setting<List<T>>.fields(
+  what: String,
+  labels: List<String>,
+  index: Int?,
+  values: (T) -> List<String>,
+  new: List<String> = labels.map { "" },
+  optional: Set<Int> = emptySet(),
+  build: (T?, List<String>) -> T,
+): Fields {
   val old = index?.let { value[it] }
   return Fields(
     if (old == null) "Add $what" else "Edit $what",
     labels,
-    old?.let(values) ?: labels.map { "" },
+    old?.let(values) ?: new,
     { put(index, build(old, it)) },
     index?.let { { removeAt(it) } },
+    optional,
   )
 }
 
+// A new machine starts with the last machine's user; a blank name becomes the short hostname.
 private fun Setting<List<Host>>.hostFields(index: Int?) =
-  fields("machine", listOf("Name", "Address (MagicDNS or IP)", "User"), index, { listOf(it.name, it.address, it.user) }) { old, (name, address, user) ->
-    old?.copy(name = name, address = address, user = user) ?: Host(name, address, user)
+  fields(
+    "machine",
+    listOf("Address (MagicDNS or IP)", "User", "Name (optional)"),
+    index,
+    { listOf(it.address, it.user, it.name) },
+    new = listOf("", value.lastOrNull()?.user.orEmpty(), ""),
+    optional = setOf(2),
+  ) { old, (address, user, name) ->
+    val named = name.ifEmpty { shortName(address) }
+    old?.copy(name = named, address = address, user = user) ?: Host(named, address, user)
   }
 
 private fun Setting<List<Shortcut>>.shortcutFields(index: Int?) =
@@ -195,7 +221,7 @@ private fun FieldsDialog(fields: Fields, onClose: () -> Unit) {
         }
       }
     },
-    confirmButton = { TextButton(onClick = { close { fields.save(values.map { it.trim() }) } }, enabled = values.all { it.isNotBlank() }) { Text("Save") } },
+    confirmButton = { TextButton(onClick = { close { fields.save(values.map { it.trim() }) } }, enabled = values.withIndex().all { (i, v) -> i in fields.optional || v.isNotBlank() }) { Text("Save") } },
     dismissButton = {
       Row {
         fields.delete?.let { TextButton(onClick = { close(it) }) { Text("Delete", color = MaterialTheme.colorScheme.error) } }

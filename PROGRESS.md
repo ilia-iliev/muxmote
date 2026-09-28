@@ -5,14 +5,15 @@ The spec is in `APP.md`. This file is the handoff between sessions, so keep it c
 ## Status (2026-09-27)
 
 Every feature in the spec is implemented.
-- **Tests:** 131 JVM tests pass. They cover real tmux both locally and through a Docker sshd.
+- **Tests:** 136 JVM tests pass. They cover real tmux both locally and through a Docker sshd.
 - **Emulator:** it was checked against the Docker sshd.
 - **Not tested yet:** a real phone on a real tailnet (see To do).
 
 ## Decisions (made with the user)
 
 - **Hosts:** a manual list with name, address and user. The address can be MagicDNS or an IP, optionally `host:port`. The app doesn't use the Tailscale API.
-- **Auth:** Tailscale SSH. JSch uses the SSH "none" method, so there are no keys. Host keys aren't pinned. That's safe because every host except literal private-LAN/loopback IPs is reached only through the tailnet `Network`, so DNS and traffic can't leak. When Tailscale is off the app fails fast. Every host needs `sudo tailscale set --ssh`.
+- **Auth:** Tailscale SSH. JSch uses only the SSH "none" method, so there are no keys. Every host except literal private-LAN/loopback IPs is reached only through the tailnet `Network`, so DNS and traffic can't leak. When Tailscale is off the app fails fast. Every host needs `sudo tailscale set --ssh`.
+- **Host keys:** pinned on first use (like OpenSSH `accept-new`) in `filesDir/known_hosts/<hostId>`; a changed key fails with `HostKeyChanged`. This covers LAN IPs, subnet routes and exit nodes, where WireGuard doesn't authenticate the far end. Deleting a machine and adding it again trusts its new key. The prompt answers fail closed if JSch rewords them.
 - **Width:**
   - While you view a session, its tmux window is resized to the phone. On leave or pause, `set-option -wu window-size` hands the size back to the PC.
   - The rows are computed with the keyboard hidden; the columns always follow the layout.
@@ -35,7 +36,8 @@ Every feature in the spec is implemented.
   - `clear` folds the last screen into the local history.
   - While the alternate screen is on, only the screen is updated.
   - Cache files for deleted hosts are pruned.
-  - `allowBackup` is off, because the cache may hold secrets.
+  - `allowBackup` is off and `data_extraction_rules.xml` excludes everything from device-to-device transfer too, because the cache may hold secrets.
+- **Adding a host:** only the address and user are required. The user is pre-filled from the last host, and a blank name becomes the short hostname (`shortName`). When nothing answers on the SSH port, the error is `SshOff`, which gets the same `tailscale set --ssh` hint as `AuthFailed`.
 - **Stack:** Kotlin, Compose/Material3, JSch (`com.github.mwiede:jsch`), kotlinx.serialization. There's no nav library; `MainActivity` switches on a `rememberSaveable` `Screen` and handles config changes itself.
 
 ## Architecture
@@ -46,7 +48,7 @@ Every feature in the spec is implemented.
   - `History.merge`.
 - `remote/`:
   - `Shell` is the interface.
-  - `SshShell`: JSch, one session per host with an exec channel per command; 10 s timeouts; typed errors `AuthFailed`, `TailscaleOff`, `ConnectionLost` and `ChannelRefused`.
+  - `SshShell`: JSch, one session per host with an exec channel per command; 10 s timeouts; typed errors `AuthFailed`, `HostKeyChanged`, `SshOff`, `TailscaleOff`, `ConnectionLost` and `ChannelRefused`.
   - `Tmux`: the commands, plus `app/src/main/resources/snapshot.sh`.
   - `PaneMirror`: `sync()` pulls a snapshot and merges it into `PaneState`.
 - `data/`:
@@ -79,7 +81,7 @@ Every feature in the spec is implemented.
 ## To do
 
 1. **Enable Tailscale SSH on your hosts.** You must run `sudo tailscale set --ssh` on each host, including this PC (`RunSSH` is false here). Then check `MUXMOTE_SSH_HOST`-style access from the phone.
-2. **Install on the phone** (moto-g86 on the tailnet) with `adb install app/build/outputs/apk/debug/app-debug.apk`, or share the APK. Then check:
+2. **Install on the phone** (moto-g86 on the tailnet) with `./install`. It builds, then installs over adb if a phone is plugged in, or else sends the APK with Taildrop to the first online Android peer. Taildrop needs `sudo tailscale set --operator=$USER` once. The tailnet policy's `ssh` rule must use `"action": "accept"`, because "check" mode needs a browser step that the app doesn't handle. Then check:
    - Tailscale detection (the link addresses of a VPN owned by another app are expected to be visible);
    - JSch kex against Tailscale SSH;
    - that the socket factory bound to the tailnet `Network` works;
