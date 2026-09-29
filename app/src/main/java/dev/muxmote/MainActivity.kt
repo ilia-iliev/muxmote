@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -22,6 +23,7 @@ import dev.muxmote.data.Opened
 import dev.muxmote.data.opened
 import dev.muxmote.data.order
 import dev.muxmote.theme.MuxmoteTheme
+import dev.muxmote.ui.Finished
 import dev.muxmote.ui.SessionBar
 import dev.muxmote.ui.SessionsModel
 import dev.muxmote.ui.SessionsScreen
@@ -51,6 +53,7 @@ private fun App(app: MuxmoteApp) {
   val resumed = isResumed()
   val scope = rememberCoroutineScope()
   val sessions = remember { SessionsModel(app::tmux, scope) }
+  val finished = remember { Finished({ tab -> app.settings.hosts.value.find { it.id == tab.hostId }?.let(app::tmux) }, app.sessionLocks, scope) }
   // Starts on the most recent session; hosts that fail to load add no tabs, and a dot in the bar says why.
   var open by rememberSaveable(stateSaver = OpenedSaver) { mutableStateOf(app.settings.recents.value.firstOrNull()) }
   var settings by rememberSaveable { mutableStateOf(false) }
@@ -63,13 +66,17 @@ private fun App(app: MuxmoteApp) {
   val first = tabs.firstOrNull()
   LaunchedEffect(current, first) { if (current == null && first != null) open = first }
   LaunchedEffect(current) { current?.let { app.settings.recents.value = app.settings.recents.value.opened(it) } }
+  DisposableEffect(current) {
+    current?.let(finished::entered)
+    onDispose { current?.let(finished::left) }
+  }
   BackHandler(settings) { settings = false }
 
-  val topBar = @Composable { SessionBar(tabs, hosts, sessions.failures(hosts), current, onSwitch = { open = it }, onSettings = { settings = true }) }
+  val topBar = @Composable { SessionBar(tabs, hosts, sessions.failures(hosts), finished.done, current, onSwitch = { open = it }, onSettings = { settings = true }) }
   when {
     settings -> SettingsScreen(app, onBack = { settings = false })
     // Keyed so switching sessions starts a fresh screen, and the old one hands its window back.
-    host != null && current != null -> key(host, current) { TerminalScreen(app, host, current.session, topBar) }
+    host != null && current != null -> key(host, current) { TerminalScreen(app, host, current.session, topBar, onSent = { finished.sent(current) }) }
     else -> SessionsScreen(app, sessions, topBar, onSettings = { settings = true })
   }
 }

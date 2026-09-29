@@ -95,7 +95,7 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, topBar: @Composable () -> Unit) {
+fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, topBar: @Composable () -> Unit, onSent: () -> Unit) {
   val model = remember { TerminalModel(app.tmux(host), session, app.sessionLocks[host.id, session], { app.paneCache.load(host, session) }, { app.paneCache.save(host, session, it) }, app.scope) }
   val shortcuts by app.settings.shortcuts.flow.collectAsState()
   val fontSize by app.settings.fontSize.flow.collectAsState()
@@ -141,7 +141,15 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, topBar: @Compos
         model.error?.let { ErrorBar(it) }
       }
       ShortcutBar(shortcuts, model::keys) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-      InputBar(text, input, model::submit, attach)
+      InputBar(
+        text,
+        input,
+        {
+          model.submit(it)
+          onSent()
+        },
+        attach,
+      )
     }
   }
 }

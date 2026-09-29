@@ -41,13 +41,16 @@ internal fun tabLabels(tabs: List<Opened>, hosts: List<Host>) =
     if (clash && host != null) "${tab.session}(${hostTag(host.address)})" else tab.session
   }
 
-/** The session tabs, with settings on the right. A red dot before settings means some machines failed to load; tapping it says why. */
+/**
+ * The session tabs, with settings on the right. An amber dot marks a tab whose answer to a prompt from the phone finished while the user was away.
+ * A red dot before settings means some machines failed to load; tapping it says why.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionBar(tabs: List<Opened>, hosts: List<Host>, failures: List<Pair<Host, String>>, current: Opened?, onSwitch: (Opened) -> Unit, onSettings: () -> Unit) {
+fun SessionBar(tabs: List<Opened>, hosts: List<Host>, failures: List<Pair<Host, String>>, done: List<Opened>, current: Opened?, onSwitch: (Opened) -> Unit, onSettings: () -> Unit) {
   var showFailures by remember { mutableStateOf(false) }
   TopAppBar(
-    title = { SessionTabs(tabs, hosts, current, onSwitch) },
+    title = { SessionTabs(tabs, hosts, done, current, onSwitch) },
     actions = {
       if (failures.isNotEmpty()) IconButton(onClick = { showFailures = true }) { StatusDot(MaterialTheme.colorScheme.error) }
       IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Settings") }
@@ -77,7 +80,7 @@ private fun FailuresDialog(failures: List<Pair<Host, String>>, onClose: () -> Un
 }
 
 @Composable
-private fun SessionTabs(tabs: List<Opened>, hosts: List<Host>, current: Opened?, onSwitch: (Opened) -> Unit) {
+private fun SessionTabs(tabs: List<Opened>, hosts: List<Host>, done: List<Opened>, current: Opened?, onSwitch: (Opened) -> Unit) {
   Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
     tabs.zip(tabLabels(tabs, hosts)).forEach { (tab, label) ->
       val selected = tab == current
@@ -88,14 +91,10 @@ private fun SessionTabs(tabs: List<Opened>, hosts: List<Host>, current: Opened?,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
         contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
       ) {
-        Text(
-          label,
-          style = MaterialTheme.typography.labelLarge,
-          fontFamily = FontFamily.Monospace,
-          fontWeight = if (selected) FontWeight.Bold else null,
-          maxLines = 1,
-          modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-        )
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+          if (tab in done) StatusDot(MaterialTheme.colorScheme.primary)
+          Text(label, style = MaterialTheme.typography.labelLarge, fontFamily = FontFamily.Monospace, fontWeight = if (selected) FontWeight.Bold else null, maxLines = 1)
+        }
       }
     }
   }

@@ -65,6 +65,9 @@ class Tmux(private val shell: Shell) {
     return parseSnapshot(sh(vars + SNAPSHOT_SCRIPT))
   }
 
+  /** A checksum of the visible rows, for telling whether the pane is still changing. */
+  suspend fun screenHash(session: String) = sh("s=\$($TMUX capture-pane -p -t ${target(session)}) && printf %s \"\$s\" | cksum")
+
   /** Pastes [text] (bracketed, so multi-line input stays one message) and presses Enter. */
   suspend fun submit(session: String, text: String) {
     val t = target(session)
