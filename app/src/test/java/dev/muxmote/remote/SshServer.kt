@@ -79,7 +79,7 @@ class SshServer : ExternalResource() {
   private fun awaitSshd() {
     val shell = connect()
     repeat(50) {
-      if (runCatching { runBlocking { shell.run("true", "") } }.isSuccess) return runBlocking { shell.close() }
+      if (runCatching { runBlocking { shell.run("true") } }.isSuccess) return runBlocking { shell.close() }
       Thread.sleep(100)
     }
     error("sshd did not come up")

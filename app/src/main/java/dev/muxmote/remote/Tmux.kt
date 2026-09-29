@@ -79,7 +79,16 @@ class Tmux(private val shell: Shell) {
     sh("$TMUX send-keys -t ${target(session)} -- " + keys.joinToString(" ") { quote(it) })
   }
 
-  private suspend fun sh(script: String, stdin: String = "") = shell.run("sh -c " + quote(PATH_PREFIX + script), stdin)
+  /** Writes [png] to a new file only the remote user can read and returns its path. */
+  suspend fun upload(png: ByteArray): String {
+    // noclobber refuses an existing file, even one someone else planted in the shared directory.
+    val f = "/tmp/muxmote/\$(date +%Y%m%d-%H%M%S)-\$\$.png"
+    return sh("umask 077; set -C; mkdir -p /tmp/muxmote && f=$f && cat > \"\$f\" && printf %s \"\$f\"", png)
+  }
+
+  private suspend fun sh(script: String, stdin: String = "") = sh(script, stdin.encodeToByteArray())
+
+  private suspend fun sh(script: String, stdin: ByteArray) = shell.run("sh -c " + quote(PATH_PREFIX + script), stdin)
 
   private fun parseSession(row: String): TmuxSession {
     val f = row.split(':', limit = 5)

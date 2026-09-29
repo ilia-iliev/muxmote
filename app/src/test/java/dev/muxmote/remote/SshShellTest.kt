@@ -47,8 +47,8 @@ class SshShellTest {
 
   @Test
   fun stdinRoundTrip() = runBlocking {
-    assertEquals("it's\n\"two\"\n", shell.run("cat", "it's\n\"two\"\n"))
-    assertEquals(numbers, shell.run("cat", numbers))
+    assertEquals("it's\n\"two\"\n", shell.run("cat", "it's\n\"two\"\n".encodeToByteArray()))
+    assertEquals(numbers, shell.run("cat", numbers.encodeToByteArray()))
   }
 
   @Test

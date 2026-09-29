@@ -7,6 +7,7 @@ import dev.muxmote.remote.Shell
 import dev.muxmote.remote.Tmux
 import dev.muxmote.remote.killServer
 import dev.muxmote.remote.killSession
+import dev.muxmote.remote.run
 import dev.muxmote.remote.sizePinned
 import dev.muxmote.remote.startSession
 import dev.muxmote.remote.windowSize
@@ -146,6 +147,20 @@ class TerminalModelTest {
     before = {}
     model.keys(Shortcut("x", "Escape"))
     time.until(upTo = time.now + POLL_MS) { model.error == null }
+  }
+
+  @Test
+  fun uploadReturnsTheRemotePath() = runBlocking {
+    val path = model.upload(byteArrayOf(1))!!
+    local.run("rm $path")
+    assertTrue(path.startsWith("/tmp/muxmote/"))
+  }
+
+  @Test
+  fun failedUploadShowsAnError() = runBlocking {
+    before = { if ("muxmote/" in it) throw IOException("link down") }
+    assertNull(model.upload(byteArrayOf(1)))
+    assertEquals("link down", model.error)
   }
 
   @Test

@@ -107,6 +107,13 @@ class TerminalModel(
 
   fun keys(shortcut: Shortcut) = send { tmux.keys(session, shortcut.keys.split(' ').filter { it.isNotBlank() }) }
 
+  /** Copies [png] to the host and returns its path there, or null after showing the error. */
+  suspend fun upload(png: ByteArray): String? {
+    var path: String? = null
+    sendError = remote { path = tmux.upload(png) }
+    return path
+  }
+
   private suspend fun sync(mirror: PaneMirror, size: Grid): String? {
     val resizeError = remote { fit(size) }
     return remote { if (mirror.sync()) lines = mirror.state.lines } ?: resizeError

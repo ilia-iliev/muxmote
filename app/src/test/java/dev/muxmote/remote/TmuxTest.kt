@@ -58,7 +58,7 @@ class TmuxTest(kind: String) {
   private class Metered(private val shell: Shell) : Shell {
     var received = 0
 
-    override suspend fun run(command: String, stdin: String) = shell.run(command, stdin).also { received += it.length }
+    override suspend fun run(command: String, stdin: ByteArray) = shell.run(command, stdin).also { received += it.length }
   }
 
   @After

@@ -5,7 +5,7 @@ import kotlinx.coroutines.withTimeout
 
 // Helpers for tests that drive tmux through a test shell (LocalShell or SshServer.shell()).
 
-suspend fun Shell.run(command: String) = run(command, "")
+suspend fun Shell.run(command: String) = run(command, ByteArray(0))
 
 /** Starts [session], 60x20, running plain sh. */
 suspend fun Shell.startSession(session: String, historyLimit: Int = 2000) {

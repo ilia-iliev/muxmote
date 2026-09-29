@@ -1,6 +1,15 @@
 package dev.muxmote.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.content.MediaType
+import androidx.compose.foundation.content.consume
+import androidx.compose.foundation.content.contentReceiver
+import androidx.compose.foundation.content.hasMediaType
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -16,11 +25,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -42,8 +55,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -59,19 +72,24 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.muxmote.MuxmoteApp
+import dev.muxmote.R
 import dev.muxmote.data.Host
 import dev.muxmote.data.Shortcut
 import dev.muxmote.term.Line
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -82,6 +100,14 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
   val resumed = isResumed()
   val input = remember { FocusRequester() }
   val keyboard = LocalSoftwareKeyboardController.current
+  val text = rememberTextFieldState()
+  val scope = rememberCoroutineScope()
+  val resolver = LocalContext.current.contentResolver
+  val attach = { uri: Uri ->
+    scope.launch { model.upload(withContext(Dispatchers.IO) { resolver.png(uri) })?.let(text::insertWord) }
+    Unit
+  }
+  val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(attach) }
 
   LaunchedEffect(resumed) { if (resumed) model.poll() }
 
@@ -124,8 +150,8 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
         // Drawn over the rows, so an error coming and going doesn't resize the window.
         model.error?.let { ErrorBar(it) }
       }
-      ShortcutBar(shortcuts, model::keys)
-      InputBar(input, model::submit)
+      ShortcutBar(shortcuts, model::keys) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+      InputBar(text, input, model::submit, attach)
     }
   }
 }
@@ -172,8 +198,11 @@ private fun ErrorBar(message: String) {
 }
 
 @Composable
-private fun ShortcutBar(shortcuts: List<Shortcut>, onKey: (Shortcut) -> Unit) {
+private fun ShortcutBar(shortcuts: List<Shortcut>, onKey: (Shortcut) -> Unit, onImage: () -> Unit) {
   Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Surface(onClick = onImage, shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
+      Icon(painterResource(R.drawable.ic_image), "Attach image", Modifier.padding(horizontal = 12.dp, vertical = 8.dp).size(20.dp))
+    }
     shortcuts.forEach { shortcut ->
       Surface(onClick = { onKey(shortcut) }, shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
         Text(shortcut.label, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
@@ -183,7 +212,17 @@ private fun ShortcutBar(shortcuts: List<Shortcut>, onKey: (Shortcut) -> Unit) {
 }
 
 /** Replaces the selection with [s] and puts the cursor after it. */
-internal fun TextFieldValue.insert(s: String) = TextFieldValue(text.replaceRange(selection.min, selection.max, s), TextRange(selection.min + s.length))
+internal fun TextFieldState.insert(s: String) = edit {
+  val start = selection.min
+  replace(start, selection.max, s)
+  selection = TextRange(start + s.length)
+}
+
+/** Inserts [word] with a space after it, and one before it unless the cursor is at the start or after whitespace. */
+internal fun TextFieldState.insertWord(word: String) {
+  val before = text.getOrNull(selection.min - 1)
+  insert((if (before == null || before.isWhitespace()) "" else " ") + word + " ")
+}
 
 /** A hardware Enter sends, like the IME's send key; Shift+Enter inserts a newline. */
 private fun KeyEvent.onEnter(submit: () -> Unit, newline: () -> Unit): Boolean {
@@ -192,22 +231,29 @@ private fun KeyEvent.onEnter(submit: () -> Unit, newline: () -> Unit): Boolean {
   return true
 }
 
+/** Sends the text; images from the keyboard (such as Gboard's clipboard) go to [onImage] instead. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun InputBar(focus: FocusRequester, onSubmit: (String) -> Unit) {
-  var text by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
+private fun InputBar(text: TextFieldState, focus: FocusRequester, onSubmit: (String) -> Unit, onImage: (Uri) -> Unit) {
   val submit = {
-    onSubmit(text.text)
-    text = TextFieldValue()
+    onSubmit(text.text.toString())
+    text.clearText()
   }
   Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
     TextField(
-      value = text,
-      onValueChange = { text = it },
-      modifier = Modifier.weight(1f).focusRequester(focus).onPreviewKeyEvent { it.onEnter(submit) { text = text.insert("\n") } },
+      state = text,
+      modifier =
+        Modifier.weight(1f)
+          .focusRequester(focus)
+          .onPreviewKeyEvent { it.onEnter(submit) { text.insert("\n") } }
+          .contentReceiver { content ->
+            if (!content.hasMediaType(MediaType.Image)) return@contentReceiver content
+            content.consume { item -> item.uri?.let(onImage) != null }
+          },
       placeholder = { Text("Type, then send (empty sends Enter)") },
-      maxLines = 5,
+      lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
       keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-      keyboardActions = KeyboardActions(onSend = { submit() }),
+      onKeyboardAction = { submit() },
     )
     IconButton(onClick = submit) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
   }

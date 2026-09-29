@@ -29,6 +29,10 @@ Every feature in the spec is implemented.
   - Sends run in call order.
   - The shortcut bar sends tmux key names with `send-keys --`.
   - All tmux commands run with `tmux -u`, so non-ASCII session names work under the C locale.
+- **Images:**
+  - There are two ways in: the first chip in the shortcut bar opens the system photo picker, and the input field accepts image content from the keyboard (Gboard clipboard, GIFs, stickers) through `contentReceiver`. That needs the state-based `TextField`.
+  - The phone scales the image to a 1568 px long edge (Claude's limit) and re-encodes it as PNG. `Tmux.upload` writes it to `/tmp/muxmote/<time>-<pid>.png` with umask 077 and noclobber, then the path goes into the input field at the cursor.
+  - `Shell.run` takes stdin as bytes.
 - **Scrollback:**
   - The phone keeps its own copy of up to 10k lines in `filesDir/panes/<hostId>/<session>.json`, with a versioned format and atomic saves.
   - `History.merge` aligns rows by content.
@@ -90,6 +94,7 @@ Every feature in the spec is implemented.
 
 ## Known limits
 
+- An upload must finish within the 10 s command timeout. A 1568 px PNG is usually 50–800 KB, which could be too slow on a weak mobile uplink.
 - Minor UI issues found in the final QA:
   - "Jump to bottom" can be ignored if you tap it during a fling. That's the likely cause, but it isn't confirmed.
   - A sliver of the row above shows at the top, because the row count rounds down.

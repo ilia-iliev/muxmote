@@ -7,6 +7,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.ClassRule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,5 +67,25 @@ class TmuxCommandsTest(kind: String) {
     // Concurrent pastes and Enters may interleave, but each text must arrive whole.
     coroutineScope { texts.forEach { launch(Dispatchers.IO) { tmux.submit(session, it) } } }
     awaitScreen { screen -> texts.all { text -> screen.any { text in it } } }
+  }
+
+  @Test
+  fun uploadWritesTheBytesToAPrivateFile() = runBlocking {
+    val bytes = ByteArray(256) { it.toByte() }
+    val path = tmux.upload(bytes)
+    try {
+      assertTrue(path, path.startsWith("/tmp/muxmote/") && path.endsWith(".png"))
+      assertEquals(bytes.joinToString("") { "%02x".format(it) }, shell.run("od -An -v -tx1 $path | tr -d ' \\n'"))
+      assertEquals("-rw-------", shell.run("ls -l $path").take(10))
+    } finally {
+      shell.run("rm $path")
+    }
+  }
+
+  @Test
+  fun uploadsGetTheirOwnFiles() = runBlocking {
+    val paths = List(2) { tmux.upload(byteArrayOf(it.toByte())) }
+    shell.run("rm " + paths.joinToString(" "))
+    assertEquals(2, paths.toSet().size)
   }
 }

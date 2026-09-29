@@ -8,7 +8,7 @@ import kotlinx.coroutines.withContext
 class LocalShell : Shell {
   private val tmuxDir = Files.createTempDirectory("muxmote-tmux").toString()
 
-  override suspend fun run(command: String, stdin: String): String =
+  override suspend fun run(command: String, stdin: ByteArray): String =
     withContext(Dispatchers.IO) {
       val process =
         ProcessBuilder("sh", "-c", command)
@@ -17,7 +17,7 @@ class LocalShell : Shell {
             environment()["TMUX_TMPDIR"] = tmuxDir
           }
           .start()
-      process.outputStream.use { it.write(stdin.toByteArray()) }
+      process.outputStream.use { it.write(stdin) }
       val out = process.inputStream.readBytes().decodeToString()
       val err = process.errorStream.readBytes().decodeToString()
       val status = process.waitFor()

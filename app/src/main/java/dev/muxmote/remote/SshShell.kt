@@ -66,7 +66,7 @@ class SshShell(address: String, private val user: String, private val knownHosts
   private var session: Session? = null
   private var closed = false
 
-  override suspend fun run(command: String, stdin: String): String =
+  override suspend fun run(command: String, stdin: ByteArray): String =
     withContext(Dispatchers.IO) {
       val session = session()
       val channel = session.openChannel("exec") as ChannelExec
@@ -74,7 +74,7 @@ class SshShell(address: String, private val user: String, private val knownHosts
         val out = ByteArrayOutputStream()
         val err = ByteArrayOutputStream()
         channel.setCommand(command)
-        channel.setInputStream(stdin.byteInputStream())
+        channel.setInputStream(stdin.inputStream())
         channel.setOutputStream(out)
         channel.setErrStream(err)
         try {

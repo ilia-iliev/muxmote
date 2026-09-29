@@ -2,7 +2,7 @@ package dev.muxmote.remote
 
 fun interface Shell {
   /** Runs [command] through the remote user's shell and returns stdout. Throws [CommandFailed] on non-zero exit. */
-  suspend fun run(command: String, stdin: String): String
+  suspend fun run(command: String, stdin: ByteArray): String
 }
 
 class CommandFailed(val status: Int, val stderr: String) : Exception(stderr.trim().ifEmpty { "exit status $status" })
