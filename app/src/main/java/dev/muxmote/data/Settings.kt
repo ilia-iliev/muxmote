@@ -35,6 +35,17 @@ val DEFAULT_SHORTCUTS =
     Shortcut("PgDn", "NPage"),
   )
 
+/** A session opened in the app. */
+@Serializable data class Opened(val hostId: String, val session: String)
+
+const val MAX_RECENTS = 100
+
+/** Moves [session] to the front. */
+fun List<Opened>.opened(session: Opened) = (listOf(session) + minus(session)).take(MAX_RECENTS)
+
+/** [sessions], most recently opened first; the others keep their order at the end. */
+fun List<Opened>.order(sessions: List<Opened>) = sessions.sortedBy { indexOf(it).takeIf { i -> i >= 0 } ?: Int.MAX_VALUE }
+
 interface Store {
   fun get(key: String): String?
 
@@ -65,4 +76,5 @@ class Settings(store: Store) {
   val hosts = Setting(store, "hosts", ListSerializer(Host.serializer()), emptyList())
   val shortcuts = Setting(store, "shortcuts", ListSerializer(Shortcut.serializer()), DEFAULT_SHORTCUTS)
   val fontSize = Setting(store, "fontSize", Float.serializer(), 11f)
+  val recents = Setting(store, "recents", ListSerializer(Opened.serializer()), emptyList())
 }

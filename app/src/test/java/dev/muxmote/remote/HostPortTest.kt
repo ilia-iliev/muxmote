@@ -20,4 +20,12 @@ class HostPortTest {
     assertEquals("100.64.0.1", shortName("100.64.0.1:2222"))
     assertEquals("fd7a:115c:a1e0::1", shortName("[fd7a:115c:a1e0::1]:2222"))
   }
+
+  @Test
+  fun tagIsTheLastPartOfAnIpOrTheShortName() {
+    assertEquals("86", hostTag("100.64.0.86"))
+    assertEquals("86", hostTag("100.64.0.86:2222"))
+    assertEquals("1a", hostTag("[fd7a:115c:a1e0::1a]:2222"))
+    assertEquals("pc", hostTag("pc.tail1234.ts.net"))
+  }
 }

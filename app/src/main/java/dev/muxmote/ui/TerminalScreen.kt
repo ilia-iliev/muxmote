@@ -6,6 +6,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.content.MediaType
 import androidx.compose.foundation.content.consume
 import androidx.compose.foundation.content.contentReceiver
@@ -78,6 +79,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
@@ -86,6 +88,9 @@ import dev.muxmote.MuxmoteApp
 import dev.muxmote.R
 import dev.muxmote.data.Host
 import dev.muxmote.data.Shortcut
+import dev.muxmote.data.Opened
+import dev.muxmote.data.order
+import dev.muxmote.remote.hostTag
 import dev.muxmote.term.Line
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -93,7 +98,7 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> Unit) {
+fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> Unit, onSwitch: (Host, String) -> Unit) {
   val model = remember { TerminalModel(app.tmux(host), session, app.sessionLocks[host.id, session], { app.paneCache.load(host, session) }, { app.paneCache.save(host, session, it) }, app.scope) }
   val shortcuts by app.settings.shortcuts.flow.collectAsState()
   val fontSize by app.settings.fontSize.flow.collectAsState()
@@ -114,12 +119,7 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
   Scaffold(
     topBar = {
       TopAppBar(
-        title = {
-          Column {
-            Text(session)
-            Text(host.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          }
-        },
+        title = { SessionTabs(app, Opened(host.id, session), onSwitch) },
         navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
       )
     }
@@ -152,6 +152,40 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
       }
       ShortcutBar(shortcuts, model::keys) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
       InputBar(text, input, model::submit, attach)
+    }
+  }
+}
+
+/** Session names, with the host's tag on names that more than one host has. */
+internal fun tabLabels(tabs: List<Opened>, hosts: List<Host>) =
+  tabs.map { tab ->
+    val clash = tabs.count { it.session == tab.session } > 1
+    val host = hosts.find { it.id == tab.hostId }
+    if (clash && host != null) "${tab.session}(${hostTag(host.address)})" else tab.session
+  }
+
+/** The current session, then every session of every host, most recently opened first. */
+@Composable
+private fun SessionTabs(app: MuxmoteApp, current: Opened, onSwitch: (Host, String) -> Unit) {
+  val hosts by app.settings.hosts.flow.collectAsState()
+  val recents by app.settings.recents.flow.collectAsState()
+  val scope = rememberCoroutineScope()
+  // Hosts that fail to load add no tabs; the home screen shows why.
+  val sessions = remember { HomeModel(app::tmux, scope) }
+  LaunchedEffect(Unit) { sessions.refresh(hosts) }
+  val loaded = hosts.flatMap { host -> (sessions.hosts[host.id] as? HostState.Loaded)?.sessions.orEmpty().map { Opened(host.id, it.name) } }
+  val tabs = recents.order((listOf(current) + loaded).distinct())
+  Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+    tabs.zip(tabLabels(tabs, hosts)).forEachIndexed { i, (tab, label) ->
+      if (i > 0) Text("|", color = MaterialTheme.colorScheme.outline)
+      val selected = tab == current
+      Text(
+        label,
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = if (selected) FontWeight.Bold else null,
+        maxLines = 1,
+        modifier = Modifier.clickable(enabled = !selected) { hosts.find { it.id == tab.hostId }?.let { onSwitch(it, tab.session) } }.padding(horizontal = 10.dp, vertical = 8.dp),
+      )
     }
   }
 }

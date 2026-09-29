@@ -41,6 +41,7 @@ Every feature in the spec is implemented.
   - While the alternate screen is on, only the screen is updated. Claude Code's `"tui": "fullscreen"` setting uses the alternate screen, so tmux (and the app) get no scrollback. The user turned it off.
   - Cache files for deleted hosts are pruned.
   - `allowBackup` is off and `data_extraction_rules.xml` excludes everything from device-to-device transfer too, because the cache may hold secrets.
+- **Session tabs:** the terminal's top bar is a horizontally scrollable row of every host's tmux sessions, most recently opened in the app first (`Settings.recents`, capped at 100), then the rest in host and tmux order. A name that several hosts have gets the host's `hostTag` (last part of the IP, else the short name), e.g. `muxmote(86) | muxmote(100)`. Tapping one switches; `MainActivity` keys the screen by session so the old one hands its window back.
 - **Adding a host:** only the address and user are required. The user is pre-filled from the last host, and a blank name becomes the short hostname (`shortName`). When nothing answers on the SSH port, the error is `SshOff`, which gets the same `tailscale set --ssh` hint as `AuthFailed`.
 - **Stack:** Kotlin, Compose/Material3, JSch (`com.github.mwiede:jsch`), kotlinx.serialization. There's no nav library; `MainActivity` switches on a `rememberSaveable` `Screen` and handles config changes itself.
 

@@ -39,6 +39,12 @@ internal fun shortName(address: String): String {
   return if (':' in host || label.all { it.isDigit() }) host else label
 }
 
+/** Tells hosts apart in a few characters: the last part of an IP, or the short name of a hostname. */
+internal fun hostTag(address: String): String {
+  val name = shortName(address)
+  return if (name == hostPort(address).first) name.substringAfterLast('.').substringAfterLast(':') else name
+}
+
 class AuthFailed(cause: JSchException) : Exception(cause.message, cause)
 
 class SshOff(host: String, cause: JSchException) : Exception("Nothing answers SSH on $host", cause)
