@@ -47,13 +47,16 @@ class Tmux(private val shell: Shell) {
     return out.lines().filter { it.isNotBlank() }.map { parseSession(it) }.sortedByDescending { it.activity }
   }
 
+  /** Also blanks the space the attached clients show around the smaller window, which tmux fills with dots. */
   suspend fun resize(session: String, cols: Int, rows: Int) {
-    sh("$TMUX resize-window -t ${target(session)} -x $cols -y $rows")
+    val t = target(session)
+    sh("$TMUX resize-window -t $t -x $cols -y $rows \\; set-option -w -t $t fill-character ' '")
   }
 
   /** Hands the window size back to the attached clients. */
   suspend fun restoreSize(session: String) {
-    sh("$TMUX set-option -wu -t ${target(session)} window-size")
+    val t = target(session)
+    sh("$TMUX set-option -wu -t $t window-size \\; set-option -wu -t $t fill-character")
   }
 
   /** Fetches at least [rows] of history. Returns null when the pane is unchanged since the sync that produced [previousHash]. */

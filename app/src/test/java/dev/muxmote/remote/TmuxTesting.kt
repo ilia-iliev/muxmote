@@ -19,7 +19,9 @@ suspend fun Shell.killSession(session: String) {
 suspend fun Shell.windowSize(session: String) = run("tmux display -p -t ${target(session)} '#{window_width}x#{window_height}'").trim()
 
 /** True while the window keeps a size set by [Tmux.resize] instead of following its clients. */
-suspend fun Shell.sizePinned(session: String) = "window-size" in run("tmux show -w -t ${target(session)}")
+suspend fun Shell.sizePinned(session: String) = "window-size" in windowOptions(session)
+
+suspend fun Shell.windowOptions(session: String) = run("tmux show -w -t ${target(session)}")
 
 /** Waits until a visible row of [session] reads [row]. */
 suspend fun Shell.awaitRow(session: String, row: String) {

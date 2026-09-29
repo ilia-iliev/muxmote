@@ -34,7 +34,7 @@ Every feature in the spec is implemented.
   - `History.merge` aligns rows by content.
   - When the width changes, the local history is replaced with the reflowed remote history.
   - `clear` folds the last screen into the local history.
-  - While the alternate screen is on, only the screen is updated.
+  - While the alternate screen is on, only the screen is updated. Claude Code's `"tui": "fullscreen"` setting uses the alternate screen, so tmux (and the app) get no scrollback. The user turned it off.
   - Cache files for deleted hosts are pruned.
   - `allowBackup` is off and `data_extraction_rules.xml` excludes everything from device-to-device transfer too, because the cache may hold secrets.
 - **Adding a host:** only the address and user are required. The user is pre-filled from the last host, and a blank name becomes the short hostname (`shortName`). When nothing answers on the SSH port, the error is `SshOff`, which gets the same `tailscale set --ssh` hint as `AuthFailed`.

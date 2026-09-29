@@ -150,8 +150,11 @@ class TmuxTest(kind: String) {
     startSession()
     tmux.resize(session, 30, 10)
     assertEquals("30x10", shell.windowSize(session))
+    // The PC's client shows the space around the smaller window blank instead of dotted.
+    assertTrue("fill-character \" \"" in shell.windowOptions(session))
     tmux.restoreSize(session)
     assertFalse(shell.sizePinned(session))
+    assertFalse("fill-character" in shell.windowOptions(session))
   }
 
   @Test
