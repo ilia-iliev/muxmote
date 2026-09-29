@@ -25,7 +25,7 @@ Every feature in the spec is implemented.
   - JSch offers zlib compression, but Tailscale SSH offers none.
 - **Input:**
   - A text field. Send pastes the text as a bracketed paste through a per-command buffer (`muxmote-$$`), then presses Enter.
-  - An empty send presses Enter only. Hardware Enter sends; Shift+Enter inserts a newline.
+  - An empty send presses Enter only. Only the Send button and hardware Enter send; the soft keyboard's Enter and Shift+Enter insert a newline (a pasted LF, which Claude Code and most TUIs read as a newline).
   - Sends run in call order.
   - The shortcut bar sends tmux key names with `send-keys --`.
   - All tmux commands run with `tmux -u`, so non-ASCII session names work under the C locale.

@@ -37,7 +37,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
@@ -82,7 +81,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -224,9 +222,10 @@ internal fun TextFieldState.insertWord(word: String) {
   insert((if (before == null || before.isWhitespace()) "" else " ") + word + " ")
 }
 
-/** A hardware Enter sends, like the IME's send key; Shift+Enter inserts a newline. */
+/** A hardware Enter sends; Shift+Enter inserts a newline. The soft keyboard's Enter is left to insert a newline. */
 private fun KeyEvent.onEnter(submit: () -> Unit, newline: () -> Unit): Boolean {
   if (key != Key.Enter && key != Key.NumPadEnter) return false
+  if (nativeKeyEvent.flags and android.view.KeyEvent.FLAG_SOFT_KEYBOARD != 0) return false
   if (type == KeyEventType.KeyDown) if (isShiftPressed) newline() else submit()
   return true
 }
@@ -253,8 +252,6 @@ private fun InputBar(text: TextFieldState, focus: FocusRequester, onSubmit: (Str
           },
       placeholder = { Text("Type, or send empty for Enter") },
       lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
-      keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-      onKeyboardAction = { submit() },
       shape = RoundedCornerShape(28.dp),
       colors =
         TextFieldDefaults.colors(
