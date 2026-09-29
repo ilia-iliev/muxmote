@@ -2,6 +2,7 @@ package dev.muxmote.ui
 
 import androidx.compose.runtime.mutableStateMapOf
 import dev.muxmote.data.Host
+import dev.muxmote.data.Opened
 import dev.muxmote.remote.Tmux
 import dev.muxmote.remote.TmuxSession
 import kotlinx.coroutines.CoroutineScope
@@ -17,7 +18,7 @@ sealed interface HostState {
 }
 
 /** The tmux sessions of every host, keyed by host id. */
-class HomeModel(private val tmux: (Host) -> Tmux, private val scope: CoroutineScope) {
+class SessionsModel(private val tmux: (Host) -> Tmux, private val scope: CoroutineScope) {
   val hosts = mutableStateMapOf<String, HostState>()
   private val loads = mutableMapOf<String, Job>()
 
@@ -32,6 +33,12 @@ class HomeModel(private val tmux: (Host) -> Tmux, private val scope: CoroutineSc
       loads[host.id] = scope.launch { hosts[host.id] = load(host) }
     }
   }
+
+  /** The loaded sessions of [list], in host and tmux order. */
+  fun opened(list: List<Host>) = list.flatMap { host -> (hosts[host.id] as? HostState.Loaded)?.sessions.orEmpty().map { Opened(host.id, it.name) } }
+
+  /** The hosts of [list] that failed to load, with why. */
+  fun failures(list: List<Host>) = list.mapNotNull { host -> (hosts[host.id] as? HostState.Failed)?.let { host to it.message } }
 
   private suspend fun load(host: Host): HostState {
     var sessions = emptyList<TmuxSession>()

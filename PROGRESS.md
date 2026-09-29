@@ -5,7 +5,7 @@ The spec is in `APP.md`. This file is the handoff between sessions, so keep it c
 ## Status (2026-09-27)
 
 Every feature in the spec is implemented.
-- **Tests:** 136 JVM tests pass. They cover real tmux both locally and through a Docker sshd.
+- **Tests:** 153 JVM tests pass. They cover real tmux both locally and through a Docker sshd.
 - **Emulator:** it was checked against the Docker sshd.
 - **Not tested yet:** a real phone on a real tailnet (see To do).
 
@@ -41,9 +41,11 @@ Every feature in the spec is implemented.
   - While the alternate screen is on, only the screen is updated. Claude Code's `"tui": "fullscreen"` setting uses the alternate screen, so tmux (and the app) get no scrollback. The user turned it off.
   - Cache files for deleted hosts are pruned.
   - `allowBackup` is off and `data_extraction_rules.xml` excludes everything from device-to-device transfer too, because the cache may hold secrets.
-- **Session tabs:** the terminal's top bar is a horizontally scrollable row of every host's tmux sessions, most recently opened in the app first (`Settings.recents`, capped at 100), then the rest in host and tmux order. A name that several hosts have gets the host's `hostTag` (last part of the IP, else the short name), e.g. `muxmote(86) | muxmote(100)`. Tapping one switches; `MainActivity` keys the screen by session so the old one hands its window back.
+- **No home screen:** the app opens straight into the most recently opened session. The top bar is the session tabs with settings on the right, and a red dot before settings when some machines fail to load (tap it for the errors). There's no back arrow, and Back leaves the app (or closes settings). With nothing to open (first run, or its machine deleted), `SessionsScreen` shows why: Tailscale off, no machines, or each machine's status. The first session to load then opens by itself.
+- **Session tabs:** a horizontally scrollable row of every host's tmux sessions, most recently opened in the app first (`Settings.recents`, capped at 100), then the rest in host and tmux order. A name that several hosts have gets the host's `hostTag` (last part of the IP, else the short name), e.g. `muxmote(86) | muxmote(100)`. Tapping one switches; `MainActivity` keys the screen by session so the old one hands its window back.
 - **Adding a host:** only the address and user are required. The user is pre-filled from the last host, and a blank name becomes the short hostname (`shortName`). When nothing answers on the SSH port, the error is `SshOff`, which gets the same `tailscale set --ssh` hint as `AuthFailed`.
-- **Stack:** Kotlin, Compose/Material3, JSch (`com.github.mwiede:jsch`), kotlinx.serialization. There's no nav library; `MainActivity` switches on a `rememberSaveable` `Screen` and handles config changes itself.
+- **Look:** always dark, in the logo's graphite (`#16191F`, also the terminal background) and amber (`#F0B35B`) — no Material You. Hosts are rounded panels with a status dot; session names and addresses are monospace. Terminal tabs are pills, shortcuts are keycaps, the input is a rounded field with an amber send button. Shared pieces live in `ui/Styled.kt`; `ic_logo` is the launcher foreground cropped.
+- **Stack:** Kotlin, Compose/Material3, JSch (`com.github.mwiede:jsch`), kotlinx.serialization. There's no nav library; `MainActivity` keeps the open session (`Opened`) and a settings flag in `rememberSaveable` and handles config changes itself.
 
 ## Architecture
 
@@ -67,8 +69,8 @@ Every feature in the spec is implemented.
 - `Connections.kt`: one shell per host. It replaces or closes the shell when the host is edited or deleted.
 - `MuxmoteApp`: the container. It holds settings, pane cache, Tailscale, connections, session locks, and the app scope.
 - `ui/`:
-  - `HomeModel` and `TerminalModel` are plain classes with no Android dependencies, tested on the JVM against real tmux.
-  - The screens are thin: `HomeScreen`, `TerminalScreen` (`followTop` and `Grid.resized` are pure helpers), and `SettingsScreen`.
+  - `SessionsModel` (every host's sessions, owned by `MainActivity`) and `TerminalModel` are plain classes with no Android dependencies, tested on the JVM against real tmux.
+  - The screens are thin: `SessionBar` (the shared top bar), `SessionsScreen`, `TerminalScreen` (`followTop` and `Grid.resized` are pure helpers), and `SettingsScreen`.
   - `Remote.kt` maps errors to messages.
 
 ## Environment
@@ -109,4 +111,4 @@ Every feature in the spec is implemented.
 ## Release
 
 - `./gradlew :app:bundleRelease` builds a signed AAB. The upload key is `~/.android-keys/muxmote-upload.jks` (alias `upload`); its path and password are in `~/.gradle/gradle.properties`. Play App Signing holds the app key.
-- Bump `versionCode` in `app/build.gradle.kts` for every upload.
+- `./release` does it all: bumps `versionCode` and the minor `versionName` (counting from the committed values, so a rerun after a failure reuses the number), builds the AAB, publishes it to the `internal` track with commit subjects since the last `v*` tag as notes, then commits the bump and tags `v<name>`. It needs a Play service account key at `~/.android-keys/play-service-account.json`.

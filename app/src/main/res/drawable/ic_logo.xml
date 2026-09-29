@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher foreground's three panes, cropped to their bounds. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="44"
+    android:viewportHeight="44">
+    <group android:translateX="-32" android:translateY="-32">
+        <path
+            android:fillColor="#40FFFFFF"
+            android:pathData="M34.75,32h13a2.75,2.75 0,0 1,2.75 2.75v38.5a2.75,2.75 0,0 1,-2.75 2.75h-13a2.75,2.75 0,0 1,-2.75 -2.75v-38.5a2.75,2.75 0,0 1,2.75 -2.75z" />
+        <path
+            android:fillColor="#F0B35B"
+            android:pathData="M56.75,32h16.5a2.75,2.75 0,0 1,2.75 2.75v14.8a2.75,2.75 0,0 1,-2.75 2.75h-16.5a2.75,2.75 0,0 1,-2.75 -2.75v-14.8a2.75,2.75 0,0 1,2.75 -2.75z" />
+        <path
+            android:fillColor="#40FFFFFF"
+            android:pathData="M56.75,55.7h16.5a2.75,2.75 0,0 1,2.75 2.75v14.8a2.75,2.75 0,0 1,-2.75 2.75h-16.5a2.75,2.75 0,0 1,-2.75 -2.75v-14.8a2.75,2.75 0,0 1,2.75 -2.75z" />
+    </group>
+</vector>

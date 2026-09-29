@@ -1,43 +1,42 @@
 package dev.muxmote
 
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import dev.muxmote.data.Host
 import dev.muxmote.data.Opened
 import dev.muxmote.data.opened
+import dev.muxmote.data.order
 import dev.muxmote.theme.MuxmoteTheme
-import dev.muxmote.ui.HomeScreen
+import dev.muxmote.ui.SessionBar
+import dev.muxmote.ui.SessionsModel
+import dev.muxmote.ui.SessionsScreen
 import dev.muxmote.ui.SettingsScreen
 import dev.muxmote.ui.TerminalScreen
-import kotlinx.serialization.Serializable
+import dev.muxmote.ui.isResumed
 import kotlinx.serialization.json.Json
 
-@Serializable
-sealed interface Screen {
-  @Serializable data object Home : Screen
-
-  @Serializable data object Settings : Screen
-
-  @Serializable data class Terminal(val host: Host, val session: String) : Screen
-}
-
-/** Keeps the open screen across activity recreation (dark mode switch, process death). */
-val ScreenSaver = Saver<Screen, String>({ Json.encodeToString(Screen.serializer(), it) }, { Json.decodeFromString(Screen.serializer(), it) })
+/** Keeps the open session across activity recreation and process death. */
+val OpenedSaver = Saver<Opened?, String>({ it?.let { Json.encodeToString(Opened.serializer(), it) } }, { Json.decodeFromString(Opened.serializer(), it) })
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    enableEdgeToEdge()
+    // The theme is always dark, so the bar icons stay light whatever the system mode.
+    enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
     super.onCreate(savedInstanceState)
     val app = application as MuxmoteApp
     setContent { MuxmoteTheme { App(app) } }
@@ -46,17 +45,31 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun App(app: MuxmoteApp) {
-  var screen by rememberSaveable(stateSaver = ScreenSaver) { mutableStateOf<Screen>(Screen.Home) }
-  val home = { screen = Screen.Home }
-  BackHandler(screen != Screen.Home, home)
-  LaunchedEffect(screen) {
-    val s = screen as? Screen.Terminal ?: return@LaunchedEffect
-    app.settings.recents.value = app.settings.recents.value.opened(Opened(s.host.id, s.session))
-  }
-  when (val s = screen) {
-    Screen.Home -> HomeScreen(app, onOpen = { host, session -> screen = Screen.Terminal(host, session) }, onSettings = { screen = Screen.Settings })
-    Screen.Settings -> SettingsScreen(app, onBack = home)
+  val hosts by app.settings.hosts.flow.collectAsState()
+  val recents by app.settings.recents.flow.collectAsState()
+  val tailscaleUp by app.tailscale.connected.collectAsState()
+  val resumed = isResumed()
+  val scope = rememberCoroutineScope()
+  val sessions = remember { SessionsModel(app::tmux, scope) }
+  // Starts on the most recent session; hosts that fail to load add no tabs, and a dot in the bar says why.
+  var open by rememberSaveable(stateSaver = OpenedSaver) { mutableStateOf(app.settings.recents.value.firstOrNull()) }
+  var settings by rememberSaveable { mutableStateOf(false) }
+  val host = open?.let { o -> hosts.find { it.id == o.hostId } }
+  val current = open?.takeIf { host != null }
+  val tabs = recents.order((listOfNotNull(current) + sessions.opened(hosts)).distinct())
+
+  LaunchedEffect(resumed, hosts, tailscaleUp, current) { if (resumed) sessions.refresh(hosts) }
+  // With nothing open (first run, or its machine deleted), the first session to load opens.
+  val first = tabs.firstOrNull()
+  LaunchedEffect(current, first) { if (current == null && first != null) open = first }
+  LaunchedEffect(current) { current?.let { app.settings.recents.value = app.settings.recents.value.opened(it) } }
+  BackHandler(settings) { settings = false }
+
+  val topBar = @Composable { SessionBar(tabs, hosts, sessions.failures(hosts), current, onSwitch = { open = it }, onSettings = { settings = true }) }
+  when {
+    settings -> SettingsScreen(app, onBack = { settings = false })
     // Keyed so switching sessions starts a fresh screen, and the old one hands its window back.
-    is Screen.Terminal -> key(s) { TerminalScreen(app, s.host, s.session, onBack = home, onSwitch = { host, session -> screen = Screen.Terminal(host, session) }) }
+    host != null && current != null -> key(host, current) { TerminalScreen(app, host, current.session, topBar) }
+    else -> SessionsScreen(app, sessions, topBar, onSettings = { settings = true })
   }
 }

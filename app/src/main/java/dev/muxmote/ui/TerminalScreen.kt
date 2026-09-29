@@ -5,6 +5,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.content.MediaType
@@ -36,19 +43,15 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -79,7 +82,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
@@ -88,17 +90,14 @@ import dev.muxmote.MuxmoteApp
 import dev.muxmote.R
 import dev.muxmote.data.Host
 import dev.muxmote.data.Shortcut
-import dev.muxmote.data.Opened
-import dev.muxmote.data.order
-import dev.muxmote.remote.hostTag
 import dev.muxmote.term.Line
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> Unit, onSwitch: (Host, String) -> Unit) {
+fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, topBar: @Composable () -> Unit) {
   val model = remember { TerminalModel(app.tmux(host), session, app.sessionLocks[host.id, session], { app.paneCache.load(host, session) }, { app.paneCache.save(host, session, it) }, app.scope) }
   val shortcuts by app.settings.shortcuts.flow.collectAsState()
   val fontSize by app.settings.fontSize.flow.collectAsState()
@@ -116,14 +115,7 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
 
   LaunchedEffect(resumed) { if (resumed) model.poll() }
 
-  Scaffold(
-    topBar = {
-      TopAppBar(
-        title = { SessionTabs(app, Opened(host.id, session), onSwitch) },
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-      )
-    }
-  ) { padding ->
+  Scaffold(topBar = topBar) { padding ->
     Column(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
       val textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = fontSize.sp, lineHeight = (fontSize * 1.2f).sp, color = TermForeground)
       val measurer = rememberTextMeasurer()
@@ -152,40 +144,6 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, onBack: () -> U
       }
       ShortcutBar(shortcuts, model::keys) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
       InputBar(text, input, model::submit, attach)
-    }
-  }
-}
-
-/** Session names, with the host's tag on names that more than one host has. */
-internal fun tabLabels(tabs: List<Opened>, hosts: List<Host>) =
-  tabs.map { tab ->
-    val clash = tabs.count { it.session == tab.session } > 1
-    val host = hosts.find { it.id == tab.hostId }
-    if (clash && host != null) "${tab.session}(${hostTag(host.address)})" else tab.session
-  }
-
-/** The current session, then every session of every host, most recently opened first. */
-@Composable
-private fun SessionTabs(app: MuxmoteApp, current: Opened, onSwitch: (Host, String) -> Unit) {
-  val hosts by app.settings.hosts.flow.collectAsState()
-  val recents by app.settings.recents.flow.collectAsState()
-  val scope = rememberCoroutineScope()
-  // Hosts that fail to load add no tabs; the home screen shows why.
-  val sessions = remember { HomeModel(app::tmux, scope) }
-  LaunchedEffect(Unit) { sessions.refresh(hosts) }
-  val loaded = hosts.flatMap { host -> (sessions.hosts[host.id] as? HostState.Loaded)?.sessions.orEmpty().map { Opened(host.id, it.name) } }
-  val tabs = recents.order((listOf(current) + loaded).distinct())
-  Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-    tabs.zip(tabLabels(tabs, hosts)).forEachIndexed { i, (tab, label) ->
-      if (i > 0) Text("|", color = MaterialTheme.colorScheme.outline)
-      val selected = tab == current
-      Text(
-        label,
-        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        fontWeight = if (selected) FontWeight.Bold else null,
-        maxLines = 1,
-        modifier = Modifier.clickable(enabled = !selected) { hosts.find { it.id == tab.hostId }?.let { onSwitch(it, tab.session) } }.padding(horizontal = 10.dp, vertical = 8.dp),
-      )
     }
   }
 }
@@ -231,17 +189,25 @@ private fun ErrorBar(message: String) {
   )
 }
 
+/** A key on the shortcut bar. */
+@Composable
+private fun Keycap(onClick: () -> Unit, content: @Composable () -> Unit) {
+  Surface(
+    onClick = onClick,
+    shape = MaterialTheme.shapes.small,
+    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    modifier = Modifier.heightIn(min = 40.dp).widthIn(min = 48.dp),
+  ) {
+    Box(Modifier.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) { content() }
+  }
+}
+
 @Composable
 private fun ShortcutBar(shortcuts: List<Shortcut>, onKey: (Shortcut) -> Unit, onImage: () -> Unit) {
-  Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-    Surface(onClick = onImage, shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
-      Icon(painterResource(R.drawable.ic_image), "Attach image", Modifier.padding(horizontal = 12.dp, vertical = 8.dp).size(20.dp))
-    }
-    shortcuts.forEach { shortcut ->
-      Surface(onClick = { onKey(shortcut) }, shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
-        Text(shortcut.label, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
-      }
-    }
+  Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Keycap(onImage) { Icon(painterResource(R.drawable.ic_image), "Attach image", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) }
+    shortcuts.forEach { shortcut -> Keycap({ onKey(shortcut) }) { Text(shortcut.label, style = MaterialTheme.typography.labelLarge, fontFamily = FontFamily.Monospace) } }
   }
 }
 
@@ -273,7 +239,8 @@ private fun InputBar(text: TextFieldState, focus: FocusRequester, onSubmit: (Str
     onSubmit(text.text.toString())
     text.clearText()
   }
-  Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+  val field = MaterialTheme.colorScheme.surfaceContainerHigh
+  Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
     TextField(
       state = text,
       modifier =
@@ -284,11 +251,19 @@ private fun InputBar(text: TextFieldState, focus: FocusRequester, onSubmit: (Str
             if (!content.hasMediaType(MediaType.Image)) return@contentReceiver content
             content.consume { item -> item.uri?.let(onImage) != null }
           },
-      placeholder = { Text("Type, then send (empty sends Enter)") },
+      placeholder = { Text("Type, or send empty for Enter") },
       lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
       keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
       onKeyboardAction = { submit() },
+      shape = RoundedCornerShape(28.dp),
+      colors =
+        TextFieldDefaults.colors(
+          focusedContainerColor = field,
+          unfocusedContainerColor = field,
+          focusedIndicatorColor = Color.Transparent,
+          unfocusedIndicatorColor = Color.Transparent,
+        ),
     )
-    IconButton(onClick = submit) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
+    FilledIconButton(onClick = submit, modifier = Modifier.size(56.dp)) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
   }
 }

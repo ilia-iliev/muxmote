@@ -1,18 +1,20 @@
 package dev.muxmote
 
 import androidx.compose.runtime.saveable.SaverScope
-import dev.muxmote.data.Host
+import dev.muxmote.data.Opened
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
-class ScreenTest {
-  private fun roundTrip(screen: Screen): Screen? {
-    val saved = with(ScreenSaver) { SaverScope { true }.save(screen) }!!
-    return ScreenSaver.restore(saved)
-  }
+class OpenedSaverTest {
+  private fun save(opened: Opened?) = with(OpenedSaver) { SaverScope { true }.save(opened) }
 
   @Test
   fun survivesRecreation() {
-    listOf(Screen.Home, Screen.Settings, Screen.Terminal(Host("pc", "pc.ts.net", "me"), "main")).forEach { assertEquals(it, roundTrip(it)) }
+    val opened = Opened("pc", "main")
+    assertEquals(opened, OpenedSaver.restore(save(opened)!!))
   }
+
+  @Test
+  fun nothingOpenSavesNothing() = assertNull(save(null))
 }

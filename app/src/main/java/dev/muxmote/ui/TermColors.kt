@@ -14,8 +14,9 @@ import dev.muxmote.term.DEFAULT
 import dev.muxmote.term.Line
 import dev.muxmote.term.Style
 import dev.muxmote.term.isRgb
+import dev.muxmote.theme.Graphite
 
-val TermBackground = Color(0xFF1E1E1E)
+val TermBackground = Graphite
 val TermForeground = Color(0xFFD4D4D4)
 
 private val ANSI16 =

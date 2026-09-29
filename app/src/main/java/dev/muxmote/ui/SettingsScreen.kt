@@ -1,6 +1,10 @@
 package dev.muxmote.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -119,42 +122,68 @@ fun SettingsScreen(app: MuxmoteApp, onBack: () -> Unit) {
 
   Scaffold(
     topBar = {
-      TopAppBar(title = { Text("Settings") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } })
+      TopAppBar(
+        title = { Text("Settings") },
+        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+        colors = barColors(),
+      )
     }
   ) { padding ->
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
+    LazyColumn(
+      Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 16.dp),
+      verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
       item { Section("Machines") { dialog = settings.hosts.hostFields(null) } }
-      itemsIndexed(hosts, key = { _, host -> host.id }) { i, host ->
-        ListItem(
-          headlineContent = { Text(host.name) },
-          supportingContent = { Text("${host.user}@${host.address}") },
-          modifier = Modifier.clickable { dialog = settings.hosts.hostFields(i) },
-        )
+      item {
+        Panel {
+          hosts.forEachIndexed { i, host ->
+            if (i > 0) Hairline()
+            ListItem(
+              headlineContent = { Text(host.name, fontWeight = FontWeight.Medium) },
+              supportingContent = { Text("${host.user}@${host.address}", fontFamily = FontFamily.Monospace) },
+              colors = rowColors(),
+              modifier = Modifier.clickable { dialog = settings.hosts.hostFields(i) },
+            )
+          }
+          if (hosts.isNotEmpty()) Hairline()
+          Note("Each machine needs Tailscale SSH: sudo tailscale set --ssh")
+        }
       }
-      item { Note("Each machine needs Tailscale SSH: sudo tailscale set --ssh") }
 
       item { Section("Shortcuts") { dialog = settings.shortcuts.shortcutFields(null) } }
-      itemsIndexed(shortcuts) { i, shortcut ->
-        ListItem(
-          headlineContent = { Text(shortcut.label) },
-          supportingContent = { Text(shortcut.keys, fontFamily = FontFamily.Monospace) },
-          trailingContent = {
-            Row {
-              IconButton(onClick = { settings.shortcuts.move(i, i - 1) }, enabled = i > 0) { Icon(Icons.Filled.KeyboardArrowUp, "Move up") }
-              IconButton(onClick = { settings.shortcuts.move(i, i + 1) }, enabled = i < shortcuts.lastIndex) { Icon(Icons.Filled.KeyboardArrowDown, "Move down") }
-            }
-          },
-          modifier = Modifier.clickable { dialog = settings.shortcuts.shortcutFields(i) },
-        )
-      }
       item {
-        TextButton(onClick = { confirmReset = true }, enabled = shortcuts != DEFAULT_SHORTCUTS, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Reset to defaults") }
+        Panel {
+          shortcuts.forEachIndexed { i, shortcut ->
+            if (i > 0) Hairline()
+            ListItem(
+              headlineContent = { Text(shortcut.label, fontWeight = FontWeight.Medium) },
+              supportingContent = { Text(shortcut.keys, fontFamily = FontFamily.Monospace) },
+              trailingContent = {
+                Row {
+                  IconButton(onClick = { settings.shortcuts.move(i, i - 1) }, enabled = i > 0) { Icon(Icons.Filled.KeyboardArrowUp, "Move up") }
+                  IconButton(onClick = { settings.shortcuts.move(i, i + 1) }, enabled = i < shortcuts.lastIndex) { Icon(Icons.Filled.KeyboardArrowDown, "Move down") }
+                }
+              },
+              colors = rowColors(),
+              modifier = Modifier.clickable { dialog = settings.shortcuts.shortcutFields(i) },
+            )
+          }
+          Hairline()
+          TextButton(onClick = { confirmReset = true }, enabled = shortcuts != DEFAULT_SHORTCUTS, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Reset to defaults") }
+        }
       }
 
+      item { SectionLabel("Terminal", Modifier.padding(top = 28.dp, bottom = 12.dp)) }
       item {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-          Text("Terminal font size: ${fontSize.toInt()}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-          Slider(value = fontSize, onValueChange = { settings.fontSize.value = it }, valueRange = 8f..16f, steps = 7)
+        Panel {
+          Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text("Font size", fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+              Text("${fontSize.toInt()} sp", fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary)
+            }
+            Slider(value = fontSize, onValueChange = { settings.fontSize.value = it }, valueRange = 8f..16f, steps = 7)
+          }
         }
       }
     }
@@ -185,11 +214,14 @@ private fun ResetDialog(onReset: () -> Unit, onClose: () -> Unit) {
 
 @Composable
 private fun Section(title: String, onAdd: () -> Unit) {
-  Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-    Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+  Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+    SectionLabel(title, Modifier.weight(1f))
     IconButton(onClick = onAdd) { Icon(Icons.Filled.Add, "Add") }
   }
 }
+
+@Composable
+private fun rowColors() = ListItemDefaults.colors(containerColor = Color.Transparent)
 
 @Composable
 private fun Note(text: String) {

@@ -1,6 +1,7 @@
 package dev.muxmote.ui
 
 import dev.muxmote.data.Host
+import dev.muxmote.data.Opened
 import dev.muxmote.remote.LocalShell
 import dev.muxmote.remote.Shell
 import dev.muxmote.remote.Tmux
@@ -17,7 +18,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class HomeModelTest {
+class SessionsModelTest {
   private val time = VirtualTime()
   private val scope = CoroutineScope(time.dispatcher + SupervisorJob())
   private val pc = Host("pc", "pc", "me", id = "pc")
@@ -37,7 +38,7 @@ class HomeModelTest {
       }
     )
   }
-  private val model = HomeModel({ tmux(it) }, scope)
+  private val model = SessionsModel({ tmux(it) }, scope)
 
   private fun sessions(host: Host) = (model.hosts[host.id] as HostState.Loaded).sessions.map { it.name }
 
@@ -74,6 +75,16 @@ class HomeModelTest {
     time.until { !model.refreshing }
     assertEquals(HostState.Failed("No route to host"), model.hosts[pc.id])
     assertEquals(listOf("agent"), sessions(laptop))
+    assertEquals(listOf(pc to "No route to host"), model.failures(listOf(pc, laptop)))
+  }
+
+  @Test
+  fun openedListsLoadedSessionsInHostOrder() = runBlocking {
+    shells.getValue(pc).startSession("build")
+    tmux = { host -> if (host == laptop) Tmux(Shell { _, _ -> throw IOException("No route to host") }) else Tmux(shells.getValue(host)) }
+    model.refresh(listOf(pc, laptop))
+    time.until { !model.refreshing }
+    assertEquals(listOf(Opened(pc.id, "build")), model.opened(listOf(laptop, pc)))
   }
 
   @Test
