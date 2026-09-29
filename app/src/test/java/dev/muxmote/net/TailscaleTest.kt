@@ -14,7 +14,7 @@ class TailscaleTest {
 
   @Test
   fun recognisesTailnetRanges() {
-    assertTrue(ts("100.106.4.86"))
+    assertTrue(ts("100.101.2.3"))
     assertTrue(ts("100.127.255.255"))
     assertTrue(ts("fd7a:115c:a1e0::c736:457"))
   }
@@ -29,7 +29,7 @@ class TailscaleTest {
 
   @Test
   fun picksTheVpnHoldingATailnetAddress() {
-    assertEquals("ts", tailnet(mapOf("other" to listOf(ip("10.8.0.2")), "ts" to listOf(ip("fe80::1"), ip("100.106.4.86")))))
+    assertEquals("ts", tailnet(mapOf("other" to listOf(ip("10.8.0.2")), "ts" to listOf(ip("fe80::1"), ip("100.101.2.3")))))
   }
 
   @Test
@@ -41,7 +41,7 @@ class TailscaleTest {
   @Test
   fun onlyPrivateLanAndLoopbackLiteralsSkipTheTailnet() {
     listOf("10.0.2.2", "172.16.0.1", "172.31.255.255", "192.168.1.10", "127.0.0.1", "::1").forEach { assertFalse(it, needsTailnet(it)) }
-    listOf("100.64.0.1", "100.106.4.86", "172.32.0.1", "8.8.8.8", "fd7a:115c:a1e0::1", "fd00::1", "pc", "pc.tail1234.ts.net", "localhost", "10.0.2.2.example.com")
+    listOf("100.64.0.1", "100.101.2.3", "172.32.0.1", "8.8.8.8", "fd7a:115c:a1e0::1", "fd00::1", "pc", "pc.tail1234.ts.net", "localhost", "10.0.2.2.example.com")
       .forEach { assertTrue(it, needsTailnet(it)) }
   }
 }
