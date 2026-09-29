@@ -1,0 +1,76 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = ["google-api-python-client", "google-auth"]
+# ///
+"""Bumps the version, builds the signed AAB, publishes it to the Play internal track, then commits and tags the bump."""
+import os
+import re
+import subprocess
+from pathlib import Path
+
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+ROOT = Path(__file__).resolve().parent
+GRADLE = ROOT / "app/build.gradle.kts"
+BUNDLE = ROOT / "app/build/outputs/bundle/release/app-release.aab"
+KEY = Path.home() / ".android-keys/play-service-account.json"
+PACKAGE = "dev.muxmote"
+TRACK = "internal"
+
+
+def git(*args):
+    return subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def bump():
+    """Counts from the committed version, so a rerun after a failed upload reuses the same number."""
+    committed = git("show", "HEAD:app/build.gradle.kts")
+    code = int(re.search(r"versionCode = (\d+)", committed)[1]) + 1
+    major, minor = re.search(r'versionName = "(\d+)\.(\d+)"', committed).groups()
+    name = f"{major}.{int(minor) + 1}"
+    text = re.sub(r"versionCode = \d+", f"versionCode = {code}", GRADLE.read_text())
+    GRADLE.write_text(re.sub(r'versionName = "[^"]*"', f'versionName = "{name}"', text))
+    return code, name
+
+
+def notes():
+    """Commit subjects since the last release, cut to Play's 500-character limit."""
+    tags = git("tag", "--list", "v*", "--sort=-v:refname").splitlines()
+    return git("log", "--format=• %s", f"{tags[0]}..HEAD" if tags else "HEAD")[:500]
+
+
+def bundle():
+    env = {"JAVA_HOME": "/opt/android-studio/jbr", **os.environ}
+    subprocess.run(["./gradlew", "-q", ":app:bundleRelease"], cwd=ROOT, env=env, check=True)
+
+
+def publish(code, name):
+    creds = service_account.Credentials.from_service_account_file(
+        str(KEY), scopes=["https://www.googleapis.com/auth/androidpublisher"])
+    edits = build("androidpublisher", "v3", credentials=creds).edits()
+    edit = edits.insert(packageName=PACKAGE, body={}).execute()["id"]
+    media = MediaFileUpload(str(BUNDLE), mimetype="application/octet-stream", resumable=True)
+    edits.bundles().upload(packageName=PACKAGE, editId=edit, media_body=media).execute()
+    release = {
+        "name": name,
+        "versionCodes": [str(code)],
+        "status": "completed",
+        "releaseNotes": [{"language": "en-US", "text": notes()}],
+    }
+    edits.tracks().update(packageName=PACKAGE, editId=edit, track=TRACK,
+                          body={"track": TRACK, "releases": [release]}).execute()
+    edits.commit(packageName=PACKAGE, editId=edit).execute()
+
+
+def tag(name):
+    git("commit", "-m", f"Release {name}", "--", "app/build.gradle.kts")
+    git("tag", f"v{name}")
+
+
+code, name = bump()
+bundle()
+publish(code, name)
+tag(name)
+print(f"Released {name} ({code}) to the {TRACK} track.")
