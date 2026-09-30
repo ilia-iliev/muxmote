@@ -33,21 +33,25 @@ import dev.muxmote.data.Host
 import dev.muxmote.data.Opened
 import dev.muxmote.remote.hostTag
 
-/** Session names, with the host's tag on names that more than one host has. */
+/** Session names, shortened, with the host's tag on names that more than one host has. */
 internal fun tabLabels(tabs: List<Opened>, hosts: List<Host>) =
   tabs.map { tab ->
     val clash = tabs.count { it.session == tab.session } > 1
     val host = hosts.find { it.id == tab.hostId }
-    if (clash && host != null) "${tab.session}(${hostTag(host.address)})" else tab.session
+    val name = abbreviated(tab.session)
+    if (clash && host != null) "$name(${hostTag(host.address)})" else name
   }
 
+/** Keeps the start and end of a long name, e.g. `gemma4_developer_1` → `gemm_1`. */
+private fun abbreviated(name: String) = if (name.length <= 6) name else name.take(4) + name.takeLast(2)
+
 /**
- * The session tabs, with settings on the right. An amber dot marks a tab whose answer to a prompt from the phone finished while the user was away.
+ * The session tabs, with settings on the right. [onSwitch] says whether the bar was scrolled to reach the tab. An amber dot marks a tab whose answer to a prompt from the phone finished while the user was away.
  * A red dot before settings means some machines failed to load; tapping it says why.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionBar(tabs: List<Opened>, hosts: List<Host>, failures: List<Pair<Host, String>>, done: List<Opened>, current: Opened?, onSwitch: (Opened) -> Unit, onSettings: () -> Unit) {
+fun SessionBar(tabs: List<Opened>, hosts: List<Host>, failures: List<Pair<Host, String>>, done: List<Opened>, current: Opened?, onSwitch: (Opened, Boolean) -> Unit, onSettings: () -> Unit) {
   var showFailures by remember { mutableStateOf(false) }
   TopAppBar(
     title = { SessionTabs(tabs, hosts, done, current, onSwitch) },
@@ -80,12 +84,13 @@ private fun FailuresDialog(failures: List<Pair<Host, String>>, onClose: () -> Un
 }
 
 @Composable
-private fun SessionTabs(tabs: List<Opened>, hosts: List<Host>, done: List<Opened>, current: Opened?, onSwitch: (Opened) -> Unit) {
-  Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun SessionTabs(tabs: List<Opened>, hosts: List<Host>, done: List<Opened>, current: Opened?, onSwitch: (Opened, Boolean) -> Unit) {
+  val scroll = rememberScrollState()
+  Row(Modifier.horizontalScroll(scroll), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
     tabs.zip(tabLabels(tabs, hosts)).forEach { (tab, label) ->
       val selected = tab == current
       Surface(
-        onClick = { onSwitch(tab) },
+        onClick = { onSwitch(tab, scroll.value > 0) },
         enabled = !selected,
         shape = CircleShape,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,

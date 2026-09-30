@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
@@ -76,5 +77,7 @@ class Settings(store: Store) {
   val hosts = Setting(store, "hosts", ListSerializer(Host.serializer()), emptyList())
   val shortcuts = Setting(store, "shortcuts", ListSerializer(Shortcut.serializer()), DEFAULT_SHORTCUTS)
   val fontSize = Setting(store, "fontSize", Float.serializer(), 11f)
+  /** The tab order: only a tab the bar had to be scrolled to reach moves to the front. */
   val recents = Setting(store, "recents", ListSerializer(Opened.serializer()), emptyList())
+  val last = Setting(store, "last", Opened.serializer().nullable, null)
 }

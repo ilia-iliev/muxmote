@@ -56,8 +56,8 @@ private fun App(app: MuxmoteApp) {
   val scope = rememberCoroutineScope()
   val sessions = remember { SessionsModel(app::tmux, scope) }
   val finished = remember { Finished({ tab -> app.settings.hosts.value.find { it.id == tab.hostId }?.let(app::tmux) }, app.sessionLocks, scope) }
-  // Starts on the most recent session; hosts that fail to load add no tabs, and a dot in the bar says why.
-  var open by rememberSaveable(stateSaver = OpenedSaver) { mutableStateOf(app.settings.recents.value.firstOrNull()) }
+  // Starts on the last session opened; hosts that fail to load add no tabs, and a dot in the bar says why.
+  var open by rememberSaveable(stateSaver = OpenedSaver) { mutableStateOf(app.settings.last.value) }
   var settings by rememberSaveable { mutableStateOf(false) }
   val host = open?.let { o -> hosts.find { it.id == o.hostId } }
   val current = open?.takeIf { host != null }
@@ -67,14 +67,17 @@ private fun App(app: MuxmoteApp) {
   // With nothing open (first run, or its machine deleted), the first session to load opens.
   val first = tabs.firstOrNull()
   LaunchedEffect(current, first) { if (current == null && first != null) open = first }
-  LaunchedEffect(current) { current?.let { app.settings.recents.value = app.settings.recents.value.opened(it) } }
+  LaunchedEffect(current) { current?.let { app.settings.last.value = it } }
   DisposableEffect(current) {
     current?.let(finished::entered)
     onDispose { current?.let(finished::left) }
   }
   BackHandler(settings) { settings = false }
 
-  val topBar = @Composable { SessionBar(tabs, hosts, sessions.failures(hosts), finished.done, current, onSwitch = { open = it }, onSettings = { settings = true }) }
+  val topBar = @Composable { SessionBar(tabs, hosts, sessions.failures(hosts), finished.done, current, onSwitch = { tab, scrolled ->
+    open = tab
+    if (scrolled) app.settings.recents.value = recents.opened(tab)
+  }, onSettings = { settings = true }) }
   Box {
     when {
       settings -> SettingsScreen(app, onBack = { settings = false })

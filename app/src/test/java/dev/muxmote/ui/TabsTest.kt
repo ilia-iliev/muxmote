@@ -11,6 +11,12 @@ class TabsTest {
   @Test
   fun onlyClashingNamesGetTheHostTag() {
     val tabs = listOf(Opened("pc", "muxmote"), Opened("mac", "muxmote"), Opened("mac", "rsna_knee"))
-    assertEquals(listOf("muxmote(86)", "muxmote(100)", "rsna_knee"), tabLabels(tabs, hosts))
+    assertEquals(listOf("muxmte(86)", "muxmte(100)", "rsnaee"), tabLabels(tabs, hosts))
+  }
+
+  @Test
+  fun longNamesKeepTheirStartAndEnd() {
+    val tabs = listOf(Opened("pc", "gemma4_developer_1"), Opened("pc", "short"))
+    assertEquals(listOf("gemm_1", "short"), tabLabels(tabs, hosts))
   }
 }
