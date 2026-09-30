@@ -7,6 +7,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +29,7 @@ import dev.muxmote.ui.SessionBar
 import dev.muxmote.ui.SessionsModel
 import dev.muxmote.ui.SessionsScreen
 import dev.muxmote.ui.SettingsScreen
+import dev.muxmote.ui.TailscaleOverlay
 import dev.muxmote.ui.TerminalScreen
 import dev.muxmote.ui.isResumed
 import kotlinx.serialization.json.Json
@@ -73,10 +75,14 @@ private fun App(app: MuxmoteApp) {
   BackHandler(settings) { settings = false }
 
   val topBar = @Composable { SessionBar(tabs, hosts, sessions.failures(hosts), finished.done, current, onSwitch = { open = it }, onSettings = { settings = true }) }
-  when {
-    settings -> SettingsScreen(app, onBack = { settings = false })
-    // Keyed so switching sessions starts a fresh screen, and the old one hands its window back.
-    host != null && current != null -> key(host, current) { TerminalScreen(app, host, current.session, topBar, onSent = { finished.sent(current) }) }
-    else -> SessionsScreen(app, sessions, topBar, onSettings = { settings = true })
+  Box {
+    when {
+      settings -> SettingsScreen(app, onBack = { settings = false })
+      // Keyed so switching sessions starts a fresh screen, and the old one hands its window back.
+      host != null && current != null -> key(host, current) { TerminalScreen(app, host, current.session, topBar, onSent = { finished.sent(current) }) }
+      else -> SessionsScreen(app, sessions, topBar, onSettings = { settings = true })
+    }
+    // Settings stay usable, so machines can be edited while offline.
+    if (!tailscaleUp && !settings) TailscaleOverlay(onOpen = app.tailscale::openApp)
   }
 }

@@ -1,6 +1,5 @@
 package dev.muxmote.ui
 
-import androidx.compose.material3.Surface
 import androidx.compose.ui.text.font.FontFamily
 import dev.muxmote.theme.Online
 import androidx.compose.foundation.layout.Arrangement
@@ -12,11 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -36,7 +32,6 @@ import dev.muxmote.data.Host
 @Composable
 fun SessionsScreen(app: MuxmoteApp, sessions: SessionsModel, topBar: @Composable () -> Unit, onSettings: () -> Unit) {
   val hosts by app.settings.hosts.flow.collectAsState()
-  val tailscaleUp by app.tailscale.connected.collectAsState()
   Scaffold(topBar = topBar) { padding ->
     PullToRefreshBox(isRefreshing = sessions.refreshing, onRefresh = { sessions.refresh(hosts) }, modifier = Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize()) {
       // The list scrolls under the nav bar; only its last item stops above it.
@@ -45,24 +40,9 @@ fun SessionsScreen(app: MuxmoteApp, sessions: SessionsModel, topBar: @Composable
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = padding.calculateBottomPadding() + 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        if (!tailscaleUp) item { TailscaleOff(onOpen = app.tailscale::openApp) }
         if (hosts.isEmpty()) item { NoHosts(onSettings) }
         items(hosts, key = { it.id }) { host -> Panel { HostHeader(host, sessions.hosts[host.id]) } }
       }
-    }
-  }
-}
-
-@Composable
-private fun TailscaleOff(onOpen: () -> Unit) {
-  Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.errorContainer) {
-    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-      Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error)
-      Column(Modifier.weight(1f)) {
-        Text("Tailscale is off", fontWeight = FontWeight.SemiBold)
-        Text("Connect to your tailnet to reach your machines.", style = MaterialTheme.typography.bodySmall)
-      }
-      Button(onClick = onOpen) { Text("Open") }
     }
   }
 }
