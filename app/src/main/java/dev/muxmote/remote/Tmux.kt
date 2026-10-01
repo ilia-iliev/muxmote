@@ -11,9 +11,15 @@ private const val TMUX = "tmux -u"
 // Without a UTF-8 locale tmux prints tabs as "_"; session names can't contain ':', and the command goes last.
 private const val SESSION_FORMAT = "#{session_name}:#{session_windows}:#{session_attached}:#{session_activity}:#{pane_current_command}"
 private val SNAPSHOT_SCRIPT = Tmux::class.java.getResource("/snapshot.sh")!!.readText()
+private val FILES_SCRIPT = Tmux::class.java.getResource("/files.sh")!!.readText()
+// Enough for most repositories, few enough to filter on every keystroke.
+private const val MAX_FILES = 20_000
 
 /** The session's current window, matched by exact name. */
 internal fun target(session: String) = quote("=$session:")
+
+/** Paths relative to a pane's working directory. [changed] are the ones with uncommitted changes. */
+data class RemoteFiles(val changed: List<String>, val all: List<String>)
 
 data class TmuxSession(val name: String, val windows: Int, val attached: Boolean, val activity: Long, val command: String)
 
@@ -87,6 +93,13 @@ class Tmux(private val shell: Shell) {
     // noclobber refuses an existing file, even one someone else planted in the shared directory.
     val f = "/tmp/muxmote/\$(date +%Y%m%d-%H%M%S)-\$\$.png"
     return sh("umask 077; set -C; mkdir -p /tmp/muxmote && f=$f && cat > \"\$f\" && printf %s \"\$f\"", png)
+  }
+
+  /** The files under the working directory of the session's pane. */
+  suspend fun files(session: String): RemoteFiles {
+    val rows = sh("T=${target(session)} MAX=$MAX_FILES\n" + FILES_SCRIPT).lines()
+    val blank = rows.indexOf("")
+    return RemoteFiles(rows.take(blank), rows.drop(blank + 1).filter { it.isNotEmpty() })
   }
 
   private suspend fun sh(script: String, stdin: String = "") = sh(script, stdin.encodeToByteArray())

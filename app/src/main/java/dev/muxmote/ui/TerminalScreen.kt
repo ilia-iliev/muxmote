@@ -8,10 +8,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.content.MediaType
@@ -88,6 +85,7 @@ import dev.muxmote.MuxmoteApp
 import dev.muxmote.R
 import dev.muxmote.data.Host
 import dev.muxmote.data.Shortcut
+import dev.muxmote.remote.RemoteFiles
 import dev.muxmote.term.Line
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -110,46 +108,82 @@ fun TerminalScreen(app: MuxmoteApp, host: Host, session: String, topBar: @Compos
     Unit
   }
   val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(attach) }
+  // While the file picker is open: how the picked path goes into the input.
+  var mention by remember { mutableStateOf<((String) -> Unit)?>(null) }
+  var files by remember { mutableStateOf<RemoteFiles?>(null) }
+  val pickFile = { insert: (String) -> Unit ->
+    mention = insert
+    files = null
+    scope.launch { files = model.files() ?: run { mention = null; null } }
+    Unit
+  }
+  val closePicker: () -> Unit = {
+    mention = null
+    input.requestFocus()
+  }
+  LaunchedEffect(text) {
+    var old = text.text.toString()
+    snapshotFlow { text.text.toString() to text.selection.end }
+      .collect { (new, cursor) ->
+        // The typed @ stays, so the path goes right after it.
+        if (typedMention(old, new, cursor)) pickFile { text.insert("$it ") }
+        old = new
+      }
+  }
 
   LaunchedEffect(resumed) { if (resumed) model.poll() }
 
   Scaffold(topBar = topBar) { padding ->
-    Column(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
-      val textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = fontSize.sp, lineHeight = (fontSize * 1.2f).sp, color = TermForeground)
-      val measurer = rememberTextMeasurer()
-      val cell = remember(textStyle) { measurer.measure("0".repeat(100), textStyle, softWrap = false).size.let { it.width / 100f to it.height.toFloat() } }
-      BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().background(TermBackground)) {
-        val cols = (constraints.maxWidth / cell.first).toInt()
-        val rows = (constraints.maxHeight / cell.second).toInt()
-        val imeVisible = WindowInsets.isImeVisible
-        var grid by remember { mutableStateOf(Grid(cols, rows)) }
-        LaunchedEffect(cols, rows, imeVisible) {
-          grid = grid.resized(cols, rows, imeVisible)
-          model.resize(grid)
+    Box(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
+      Column(Modifier.fillMaxSize()) {
+        val textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = fontSize.sp, lineHeight = (fontSize * 1.2f).sp, color = TermForeground)
+        val measurer = rememberTextMeasurer()
+        val cell = remember(textStyle) { measurer.measure("0".repeat(100), textStyle, softWrap = false).size.let { it.width / 100f to it.height.toFloat() } }
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().background(TermBackground)) {
+          val cols = (constraints.maxWidth / cell.first).toInt()
+          val rows = (constraints.maxHeight / cell.second).toInt()
+          val imeVisible = WindowInsets.isImeVisible
+          var grid by remember { mutableStateOf(Grid(cols, rows)) }
+          LaunchedEffect(cols, rows, imeVisible) {
+            grid = grid.resized(cols, rows, imeVisible)
+            model.resize(grid)
+          }
+          TerminalLines(
+            model.lines,
+            grid.rows,
+            rows,
+            textStyle,
+            onTap = {
+              input.requestFocus()
+              keyboard?.show()
+            },
+          )
+          // Drawn over the rows, so an error coming and going doesn't resize the window.
+          model.error?.let { ErrorBar(it) }
         }
-        TerminalLines(
-          model.lines,
-          grid.rows,
-          rows,
-          textStyle,
-          onTap = {
-            input.requestFocus()
-            keyboard?.show()
+        ShortcutBar(shortcuts, model::keys, { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
+          pickFile { text.insertWord("@$it") }
+        }
+        InputBar(
+          text,
+          input,
+          {
+            model.submit(it)
+            onSent()
           },
+          attach,
         )
-        // Drawn over the rows, so an error coming and going doesn't resize the window.
-        model.error?.let { ErrorBar(it) }
       }
-      ShortcutBar(shortcuts, model::keys) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-      InputBar(
-        text,
-        input,
-        {
-          model.submit(it)
-          onSent()
-        },
-        attach,
-      )
+      mention?.let { insert ->
+        FilePicker(
+          files,
+          {
+            insert(it)
+            closePicker()
+          },
+          closePicker,
+        )
+      }
     }
   }
 }
@@ -210,9 +244,10 @@ private fun Keycap(onClick: () -> Unit, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ShortcutBar(shortcuts: List<Shortcut>, onKey: (Shortcut) -> Unit, onImage: () -> Unit) {
+private fun ShortcutBar(shortcuts: List<Shortcut>, onKey: (Shortcut) -> Unit, onImage: () -> Unit, onFile: () -> Unit) {
   Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
     Keycap(onImage) { Icon(painterResource(R.drawable.ic_image), "Attach image", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) }
+    Keycap(onFile) { Text("@", style = MaterialTheme.typography.labelLarge, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary) }
     shortcuts.forEach { shortcut -> Keycap({ onKey(shortcut) }) { Text(shortcut.label, style = MaterialTheme.typography.labelLarge, fontFamily = FontFamily.Monospace) } }
   }
 }
@@ -246,7 +281,6 @@ private fun InputBar(text: TextFieldState, focus: FocusRequester, onSubmit: (Str
     onSubmit(text.text.toString())
     text.clearText()
   }
-  val field = MaterialTheme.colorScheme.surfaceContainerHigh
   Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
     TextField(
       state = text,
@@ -260,14 +294,8 @@ private fun InputBar(text: TextFieldState, focus: FocusRequester, onSubmit: (Str
           },
       placeholder = { Text("Type, or send empty for Enter") },
       lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
-      shape = RoundedCornerShape(28.dp),
-      colors =
-        TextFieldDefaults.colors(
-          focusedContainerColor = field,
-          unfocusedContainerColor = field,
-          focusedIndicatorColor = Color.Transparent,
-          unfocusedIndicatorColor = Color.Transparent,
-        ),
+      shape = FieldShape,
+      colors = fieldColors(),
     )
     FilledIconButton(onClick = submit, modifier = Modifier.size(56.dp)) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
   }

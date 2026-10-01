@@ -5,7 +5,7 @@
 #   docker rm -f muxmote-sshd
 # App host: 127.0.0.1:22022 (10.0.2.2:22022 from the emulator), user test.
 FROM alpine:3.22
-RUN apk add --no-cache openssh-server tmux dash-binsh \
+RUN apk add --no-cache openssh-server tmux dash-binsh git \
   && ssh-keygen -A \
   && adduser -D test && passwd -d test \
   && printf 'PasswordAuthentication yes\nPermitEmptyPasswords yes\n' >> /etc/ssh/sshd_config

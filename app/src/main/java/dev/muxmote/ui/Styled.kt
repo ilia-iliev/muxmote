@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldColors
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -52,3 +55,17 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 fun StatusDot(color: Color) = Box(Modifier.size(8.dp).background(color, CircleShape))
+
+val FieldShape = RoundedCornerShape(28.dp)
+
+/** A filled text field with no underline. */
+@Composable
+fun fieldColors(): TextFieldColors {
+  val field = MaterialTheme.colorScheme.surfaceContainerHigh
+  return TextFieldDefaults.colors(
+    focusedContainerColor = field,
+    unfocusedContainerColor = field,
+    focusedIndicatorColor = Color.Transparent,
+    unfocusedIndicatorColor = Color.Transparent,
+  )
+}

@@ -108,10 +108,15 @@ class TerminalModel(
   fun keys(shortcut: Shortcut) = send { tmux.keys(session, shortcut.keys.split(' ').filter { it.isNotBlank() }) }
 
   /** Copies [png] to the host and returns its path there, or null after showing the error. */
-  suspend fun upload(png: ByteArray): String? {
-    var path: String? = null
-    sendError = remote { path = tmux.upload(png) }
-    return path
+  suspend fun upload(png: ByteArray) = fetch { tmux.upload(png) }
+
+  /** The files around the pane's working directory, or null after showing the error. */
+  suspend fun files() = fetch { tmux.files(session) }
+
+  private suspend fun <T> fetch(block: suspend () -> T): T? {
+    var result: T? = null
+    sendError = remote { result = block() }
+    return result
   }
 
   private suspend fun sync(mirror: PaneMirror, size: Grid): String? {

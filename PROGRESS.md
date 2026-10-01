@@ -5,7 +5,7 @@ The spec is in `APP.md`. This file is the handoff between sessions, so keep it c
 ## Status (2026-09-27)
 
 Every feature in the spec is implemented.
-- **Tests:** 160 JVM tests pass. They cover real tmux both locally and through a Docker sshd.
+- **Tests:** 173 JVM tests pass. They cover real tmux both locally and through a Docker sshd.
 - **Emulator:** it was checked against the Docker sshd.
 - **Not tested yet:** a real phone on a real tailnet (see To do).
 
@@ -33,6 +33,10 @@ Every feature in the spec is implemented.
   - There are two ways in: the first chip in the shortcut bar opens the system photo picker, and the input field accepts image content from the keyboard (Gboard clipboard, GIFs, stickers) through `contentReceiver`. That needs the state-based `TextField`.
   - The phone scales the image to a 1568 px long edge (Claude's limit) and re-encodes it as PNG. `Tmux.upload` writes it to `/tmp/muxmote/<time>-<pid>.png` with umask 077 and noclobber, then the path goes into the input field at the cursor.
   - `Shell.run` takes stdin as bytes.
+- **File mentions:**
+  - The `@` chip, or typing `@` at the start of a word, opens `FilePicker` over the terminal. Its search field takes the focus, so the keyboard stays up. The best match sits just above the field, and the keyboard's Go key picks it. Picking inserts `@path ` and focuses the input again; Back closes the picker, and a typed `@` stays.
+  - `Tmux.files` runs `files.sh` in the pane's `pane_current_path`. In git it lists files that aren't ignored (`ls-files -co --exclude-standard`), with changed ones first; elsewhere it uses `find`, skipping hidden paths. It lists at most 20k files, fetched each time the picker opens.
+  - `FileMatch` adds the parent directories as `dir/`. An empty query shows the changed files. Otherwise the ranking goes: name starts with the query, then name contains it, then path contains it, then the path has its letters in order. Shorter paths win ties.
 - **Scrollback:**
   - The phone keeps its own copy of up to 10k lines in `filesDir/panes/<hostId>/<session>.json`, with a versioned format and atomic saves.
   - `History.merge` aligns rows by content.
